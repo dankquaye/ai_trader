@@ -20,25 +20,36 @@ class DerivAPI {
         };
 
         // Credentials
+        // NOTE: Tokens should be provided by the user via UI or Environment Variables.
+        // Hardcoded tokens removed for security.
         this.credentials = {
             demo: {
                 appId: 71238,
-                token: 'a8o3x9Wzjsssk1Q'
+                token: '' // User must provide
             },
             live: {
                 appId: 71236,
-                token: 'eBcvBVOLY6iZWCl'
+                token: '' // User must provide
             }
         };
 
         this.accountType = 'demo';
     }
 
+    setToken(token) {
+        if (this.credentials[this.accountType]) {
+            this.credentials[this.accountType].token = token;
+        }
+    }
+
     setAccountType(type) {
         if (type !== 'demo' && type !== 'live') return;
         this.accountType = type;
         this.disconnect();
-        this.connect();
+        // Do not auto-connect if token is missing
+        if (this.credentials[this.accountType].token) {
+            this.connect();
+        }
     }
 
     connect() {
@@ -46,6 +57,11 @@ class DerivAPI {
         const creds = this.credentials[this.accountType];
         this.appId = creds.appId;
         this.token = creds.token;
+
+        if (!this.token) {
+            console.warn('Cannot connect: Missing API Token');
+            return;
+        }
 
         const url = `wss://ws.binaryws.com/websockets/v3?app_id=${this.appId}`;
         console.log(`Connecting to ${this.accountType} account via ${url}...`);

@@ -1404,8 +1404,8 @@ class TradingBot {
                 const candleIdx = this.candles1m.findIndex(c => Math.abs(c.time - startTime) < 60);
                 if (candleIdx !== -1) {
                     // Update: trainAIOnTrade needs to support label
-                    // We'll modify extractSequence usage in trainAIOnTrade or call addSample directly
-                    const seq = this.extractSequence(candleIdx, 10);
+                    // Fix Data Leakage: Use candleIdx - 1 to ensure we train on data available BEFORE the trade
+                    const seq = this.extractSequence(candleIdx - 1, 10);
                     if (seq && this.aiFilter.addSample) {
                         this.aiFilter.addSample(seq, label);
                         this.log(`AI Memory Updated with Grade ${grade} Trade (Label: ${label}).`);

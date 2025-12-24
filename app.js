@@ -26,6 +26,7 @@ const ui = {
     pages: document.querySelectorAll('.page-section'),
     navBtns: document.querySelectorAll('.nav-btn'),
     accountSelector: document.getElementById('account-selector'),
+    tokenInput: document.getElementById('api-token-input'),
     balanceDisplay: document.getElementById('balance-display'),
     assetSelector: document.getElementById('asset-selector'),
     chartContainer: document.getElementById('chart-container'),
@@ -73,7 +74,7 @@ const ui = {
     signalConfidence: document.getElementById('signal-confidence'),
     marketEntropy: document.getElementById('market-entropy'),
     aiStatus: document.getElementById('ai-status'),
-    healthStatus: document.getElementById('health-status'), // Need to add this to HTML or create dynamically
+    healthStatus: document.getElementById('health-status'),
     watchdogStatus: document.getElementById('watchdog-status'),
     gradeStats: {
         a: document.getElementById('grade-a'),
@@ -98,6 +99,21 @@ const ui = {
         },
         chartContainer: document.getElementById('bt-chart'),
         logBody: document.getElementById('bt-log-body')
+    },
+    dashboard: {
+        regime: document.getElementById('dash-regime'),
+        confidence: document.getElementById('dash-confidence'),
+        aiProb: document.getElementById('dash-ai-prob'),
+        signal: document.getElementById('dash-signal'),
+        trend: document.getElementById('dash-score-trend'),
+        mom: document.getElementById('dash-score-mom'),
+        vol: document.getElementById('dash-score-vol'),
+        ai: document.getElementById('dash-score-ai')
+    },
+    modal: {
+        el: document.getElementById('reasoning-modal'),
+        body: document.getElementById('modal-body'),
+        closes: document.querySelectorAll('.modal-close')
     }
 };
 
@@ -268,8 +284,49 @@ setInterval(() => {
             ui.gradeStats.d.innerText = bot.gradeStats.D;
             ui.gradeStats.f.innerText = bot.gradeStats.F;
         }
+
+        // Live Dashboard Update
+        updateLiveDashboard();
     }
-}, 1000);
+}, 500);
+
+function updateLiveDashboard() {
+    if (!bot || !bot.currentTradeReasoning || !ui.dashboard.regime) return;
+
+    const r = bot.currentTradeReasoning;
+
+    // Update Regime
+    ui.dashboard.regime.innerText = r.marketCondition || 'Analyzing';
+
+    // Update Confidence
+    ui.dashboard.confidence.innerText = (r.finalScore * 100).toFixed(1) + '%';
+    if(r.finalScore > 0.8) ui.dashboard.confidence.className = "font-bold text-green-400";
+    else if(r.finalScore < 0.6) ui.dashboard.confidence.className = "font-bold text-red-400";
+    else ui.dashboard.confidence.className = "font-bold text-yellow-400";
+
+    // Update AI Prob
+    if (r.ai) {
+        const prob = r.ai.buy > 0.5 ? r.ai.buy : r.ai.sell;
+        ui.dashboard.aiProb.innerText = (prob * 100).toFixed(1) + '%';
+    } else {
+        ui.dashboard.aiProb.innerText = 'OFF';
+    }
+
+    // Update Scores
+    ui.dashboard.trend.innerText = r.trend ? (r.trend.buy > r.trend.sell ? 'UP' : 'DN') : '-';
+    ui.dashboard.mom.innerText = r.momentum ? (r.momentum.buy > r.momentum.sell ? 'UP' : 'DN') : '-';
+    ui.dashboard.vol.innerText = r.volatility ? r.volatility.toFixed(2) : '-';
+    ui.dashboard.ai.innerText = r.ai ? (r.ai.buy > 0.5 ? 'UP' : 'DN') : '-';
+
+    // Signal
+    if (bot.quantumState && bot.quantumState.pendingSignal) {
+        ui.dashboard.signal.innerText = `PENDING (${bot.quantumState.confirmationTicks})`;
+        ui.dashboard.signal.className = "font-bold text-yellow-500 animate-pulse";
+    } else {
+        ui.dashboard.signal.innerText = "WAIT";
+        ui.dashboard.signal.className = "font-bold text-gray-500";
+    }
+}
 
 // Sound Effects
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -709,6 +766,16 @@ function setupEventListeners() {
         api.setAccountType(type);
         if(window.bot) window.bot.setAccountType(type);
         showToast(`Switched to ${type.toUpperCase()} account`);
+        // Clear token input on switch to prompt re-entry or show stored if we implemented storage
+        ui.tokenInput.value = '';
+    });
+
+    ui.tokenInput.addEventListener('change', (e) => {
+        const token = e.target.value.trim();
+        if (token) {
+            api.setToken(token);
+            api.connect();
+        }
     });
 
     ui.assetSelector.addEventListener('change', (e) => {
@@ -920,6 +987,93 @@ function setupEventListeners() {
             showToast('Small Account Efficiency Mode Loaded! (Compounding + Sniper Entry)', 'success');
         });
     }
+
+    // Modal Events
+    ui.modal.closes.forEach(btn => {
+        btn.addEventListener('click', closeModal);
+    });
+
+    ui.modal.el.addEventListener('click', (e) => {
+        if(e.target === ui.modal.el || e.target.classList.contains('modal-overlay')) {
+            closeModal();
+        }
+    });
+}
+
+// Modal Logic
+function openModal(tradeId) {
+    const trade = bot.tradeHistory[tradeId];
+    if (!trade) return;
+
+    const r = trade.reasoning;
+    let html = `
+        <div class="mb-4">
+            <h5 class="font-bold text-gray-400 uppercase text-xs mb-1">Overview</h5>
+            <div class="grid grid-cols-2 gap-2 bg-gray-900 p-2 rounded">
+                <div><span class="text-gray-500">Symbol:</span> ${trade.symbol}</div>
+                <div><span class="text-gray-500">Result:</span> <span class="${trade.profit > 0 ? 'text-green-400' : 'text-red-400'}">${trade.status} ($${trade.profit})</span></div>
+                <div><span class="text-gray-500">Grade:</span> ${trade.grade}</div>
+                <div><span class="text-gray-500">Confidence:</span> ${(r?.finalScore * 100).toFixed(1)}%</div>
+            </div>
+        </div>
+    `;
+
+    if (r) {
+        html += `
+            <div class="mb-4">
+                <h5 class="font-bold text-gray-400 uppercase text-xs mb-1">Engine Scores</h5>
+                <div class="space-y-1 text-xs">
+                    <div class="flex justify-between border-b border-gray-700 pb-1">
+                        <span>Trend Engine</span>
+                        <span class="font-mono ${r.trend?.buy > 0.5 ? 'text-green-400' : 'text-red-400'}">
+                            B:${(r.trend?.buy*100).toFixed(0)}% S:${(r.trend?.sell*100).toFixed(0)}%
+                        </span>
+                    </div>
+                    <div class="flex justify-between border-b border-gray-700 pb-1">
+                        <span>Momentum Engine</span>
+                         <span class="font-mono ${r.momentum?.buy > 0.5 ? 'text-green-400' : 'text-red-400'}">
+                            B:${(r.momentum?.buy*100).toFixed(0)}% S:${(r.momentum?.sell*100).toFixed(0)}%
+                        </span>
+                    </div>
+                    <div class="flex justify-between border-b border-gray-700 pb-1">
+                        <span>Volatility Engine</span>
+                        <span class="font-mono text-blue-400">${(r.volatility || 0).toFixed(2)}</span>
+                    </div>
+                     <div class="flex justify-between border-b border-gray-700 pb-1">
+                        <span>Noise Engine</span>
+                        <span class="font-mono text-purple-400">${(r.noise || 0).toFixed(2)}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        if (r.ai) {
+             html += `
+            <div class="mb-4">
+                <h5 class="font-bold text-gray-400 uppercase text-xs mb-1">AI Insight</h5>
+                 <div class="bg-gray-900 p-2 rounded text-xs space-y-1">
+                    <div class="flex justify-between">
+                        <span>Prediction:</span>
+                        <span class="${r.ai.buy > 0.5 ? 'text-green-400' : 'text-red-400'} font-bold">
+                            ${r.ai.buy > 0.5 ? 'RISE' : 'FALL'} (${(Math.max(r.ai.buy, r.ai.sell)*100).toFixed(1)}%)
+                        </span>
+                    </div>
+                 </div>
+            </div>`;
+        }
+    } else {
+        html += `<p class="text-gray-500 italic">Detailed reasoning not available for this trade.</p>`;
+    }
+
+    ui.modal.body.innerHTML = html;
+
+    document.body.classList.add('modal-active');
+    ui.modal.el.classList.remove('opacity-0', 'pointer-events-none');
+}
+
+function closeModal() {
+    document.body.classList.remove('modal-active');
+    ui.modal.el.classList.add('opacity-0', 'pointer-events-none');
 }
 
 // UI Helpers
@@ -930,9 +1084,12 @@ window.updateTradeHistory = (history, totalProfit, wins, losses) => {
     ui.historyTable.innerHTML = '';
     const displayHistory = [...history].reverse().slice(0, 50);
 
-    displayHistory.forEach(trade => {
+    displayHistory.forEach((trade, index) => {
+        // Correct index relative to original array for modal lookup
+        const originalIndex = history.length - 1 - index;
+
         const tr = document.createElement('tr');
-        tr.className = 'border-b border-gray-700 hover:bg-gray-700 transition';
+        tr.className = 'border-b border-gray-700 hover:bg-gray-700 transition cursor-pointer';
         const color = trade.profit >= 0 ? 'text-green-400' : 'text-red-400';
         const gradeColor = trade.grade?.startsWith('A') ? 'text-green-400' : (trade.grade === 'F' ? 'text-red-500' : 'text-gray-400');
 
@@ -943,11 +1100,15 @@ window.updateTradeHistory = (history, totalProfit, wins, losses) => {
             <td class="px-6 py-4">$${trade.stake}</td>
             <td class="px-6 py-4 font-bold ${color}">$${trade.profit.toFixed(2)}</td>
             <td class="px-6 py-4 font-bold ${gradeColor}">${trade.grade || '-'}</td>
+            <td class="px-6 py-4">
+                <button class="text-xs bg-blue-900 text-blue-300 px-2 py-1 rounded hover:bg-blue-800" onclick="event.stopPropagation(); openModal(${originalIndex})">
+                    <i class="fa-solid fa-magnifying-glass"></i> Details
+                </button>
+            </td>
         `;
-        // Tooltip for reasoning
-        if(trade.reasoning) {
-            tr.title = `Score: ${(trade.reasoning.finalScore*100).toFixed(0)}% | Trend: ${(trade.reasoning.trend?.buy*100).toFixed(0)}% | Mom: ${(trade.reasoning.momentum?.buy*100).toFixed(0)}%`;
-        }
+
+        tr.onclick = () => openModal(originalIndex);
+
         ui.historyTable.appendChild(tr);
     });
 };
@@ -1122,7 +1283,8 @@ document.addEventListener('DOMContentLoaded', () => {
         setupEventListeners();
         setupApiCallbacks();
         loadSettings();
-        api.connect();
+        // Do not auto-connect. User must provide token.
+        showToast('Please enter your API Token to connect.', 'info');
     } catch (e) {
         console.error('Init Error:', e);
         showToast('Initialization Error: ' + e.message, 'error');
