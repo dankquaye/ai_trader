@@ -318,6 +318,87 @@ class TradingBot {
     // Analysis Core
     // ============================================================
 
+    detectMarketCondition() {
+        if (this.candles1m.length < 50) return;
+
+        const closes = this.candles1m.map(c => c.close);
+        const adx = this.calculateADX(closes, 14).pop() || 0;
+        const bb = this.calculateBollingerBands(closes, 20, 2);
+        const lastBB = bb[bb.length - 1];
+        const bbWidth = (lastBB.upper - lastBB.lower) / lastBB.middle;
+
+        const entropy = this.calculateShannonEntropy(this.candles1m, 30);
+        this.currentEntropy = entropy;
+
+        // Classification
+        if (adx > 25 && bbWidth > 0.001) {
+            this.marketCondition = 'Trending';
+        } else if (bbWidth < 0.001 || adx < 20) {
+            this.marketCondition = 'Ranging';
+        } else if (entropy > 1.5 || bbWidth > 0.005) {
+            this.marketCondition = 'Volatile';
+        } else {
+            this.marketCondition = 'Choppy';
+        }
+    }
+
+    determineRiskState() {
+        // State Machine Transition
+        switch (this.riskState) {
+            case 'NORMAL':
+                if (this.consecutiveLosses >= 2) this.setRiskState('PROTECT', 'Consecutive Losses');
+                if (this.marketCondition === 'Volatile') this.setRiskState('PROTECT', 'High Volatility');
+                if (this.wins > 5 && this.consecutiveLosses === 0) this.setRiskState('AGGRESSIVE', 'Win Streak');
+                break;
+
+            case 'AGGRESSIVE':
+                if (this.consecutiveLosses > 0) this.setRiskState('NORMAL', 'Loss in Aggressive Mode');
+                if (this.marketCondition === 'Choppy') this.setRiskState('NORMAL', 'Market Chop');
+                break;
+
+            case 'PROTECT':
+                if (this.wins >= 2) this.setRiskState('NORMAL', 'Recovery Confirmed');
+                if (this.consecutiveLosses >= 4) this.setRiskState('WAIT', 'Excessive Losses');
+                break;
+
+            case 'WAIT':
+                if (this.marketCondition === 'Trending' && this.confidence > 90) {
+                    this.setRiskState('PROTECT', 'High Confidence Re-entry');
+                }
+                // Cooldown timer check is handled in evaluate()
+                break;
+        }
+    }
+
+    setRiskState(state, reason) {
+        if (this.riskState !== state) {
+            this.riskState = state;
+            this.log(`Risk State changed to ${state} (${reason})`);
+            if (state === 'WAIT') {
+                this.cooldownEndTime = Date.now() + 300000; // 5 min wait
+                this.log('Enforcing 5 minute cooldown.');
+            }
+        }
+    }
+
+    adjustParameters() {
+        if (this.isParamLocked) return;
+
+        // Dynamic adjustment based on Risk State
+        if (this.riskState === 'AGGRESSIVE') {
+            this.params.confidenceThreshold = 0.75; // Lower threshold
+            this.params.wTrend = 0.4;
+            this.params.wMom = 0.4; // Momentum focus
+        } else if (this.riskState === 'PROTECT') {
+            this.params.confidenceThreshold = 0.90; // High threshold
+            this.params.wVol = 0.3;
+            this.params.wNoise = 0.3; // Safety focus
+        } else {
+            // Normal - Reset to defaults (or let Optimizer handle it)
+             // this.params.confidenceThreshold = 0.85;
+        }
+    }
+
     async evaluate() {
         try {
             await this._evaluateSafe();
@@ -435,6 +516,106 @@ class TradingBot {
     }
 
     // Legacy Analysis Methods
+
+    updateStakeWithRisk() {
+        if (this.isVirtualRecovery) return true;
+
+        // Check Daily Loss
+        const currentLoss = this.dailyStartBalance - (window.botBalance || this.dailyStartBalance);
+        const lossLimit = this.dailyStartBalance * this.maxDailyLoss;
+
+        if (currentLoss >= lossLimit) {
+            this.log('Daily Loss Limit Reached. Stopping.');
+            this.stop();
+            return false;
+        }
+
+        // Grade Logic
+        if (this.gradeHistory.length >= 3) {
+            const recentGrades = this.gradeHistory.slice(-3);
+            const avg = recentGrades.reduce((a, b) => a + b, 0) / 3;
+            // 1=D, 2=C, 3=B, 4=A
+            if (avg < 1.5) { // Mostly Ds or Fs
+                this.log('Recent Grade Quality too low (Avg < D+). Skipping Trade.');
+                return false;
+            }
+        }
+
+        if (this.useSmartRisk) {
+             // Calculate ATR-based Position Sizing
+             const atr = this.calculateATR(this.candles1m, 14);
+             const currentATR = atr[atr.length - 1];
+             if (currentATR) {
+                 // Inverse volatility sizing: Lower ATR -> Higher Stake
+                 // Base 1% risk
+                 let riskPct = 0.01;
+                 if (this.riskState === 'AGGRESSIVE') riskPct = 0.02;
+                 if (this.riskState === 'PROTECT') riskPct = 0.005;
+
+                 // Adjust by Volatility Factor (Standardized to avg ATR ~ 1.0 for indices, needs calibration per asset)
+                 // Simplified: If ATR is spiking, reduce size.
+                 const atrSMA = this.calculateSMA(atr, 20);
+                 const avgATR = atrSMA[atrSMA.length - 1] || currentATR;
+
+                 if (currentATR > avgATR * 1.5) {
+                     riskPct *= 0.5; // Halve risk in high vol
+                 }
+
+                 const balance = window.botBalance || 1000;
+                 let smartStake = balance * riskPct;
+                 this.currentStake = Math.max(0.35, parseFloat(smartStake.toFixed(2)));
+             }
+        }
+
+        return true;
+    }
+
+    analyzeMultiTF() {
+        if (this.candles1m.length < 50 || this.candles5m.length < 10) return null;
+
+        const c1 = this.candles1m;
+        const c5 = this.candles5m;
+
+        // 1. Trend Alignment (5m & 1m)
+        const ema20_5m = this.calculateEMA(c5.map(c => c.close), 20);
+        const lastEma5 = ema20_5m[ema20_5m.length - 1];
+        const lastPrice5 = c5[c5.length - 1].close;
+        const trend5m = lastPrice5 > lastEma5 ? 'up' : 'down';
+
+        const ema20_1m = this.calculateEMA(c1.map(c => c.close), 20);
+        const lastEma1 = ema20_1m[ema20_1m.length - 1];
+        const lastPrice1 = c1[c1.length - 1].close;
+        const trend1m = lastPrice1 > lastEma1 ? 'up' : 'down';
+
+        if (trend5m !== trend1m) return null; // Conflict
+
+        // 2. Momentum (RSI)
+        const rsi = this.calculateRSI(c1.map(c => c.close), 14);
+        const lastRsi = rsi[rsi.length - 1];
+
+        // 3. Volatility Squeeze (BB)
+        const bb = this.calculateBollingerBands(c1.map(c => c.close), 20, 2);
+        const lastBB = bb[bb.length - 1];
+        const width = (lastBB.upper - lastBB.lower) / lastBB.middle;
+
+        if (this.avoidSqueeze && width < 0.001) return null;
+
+        // Signal
+        if (trend1m === 'up') {
+            if (lastRsi > 40 && lastRsi < 70) {
+                 // Pullback check?
+                 // Simple trend following
+                 return 'rise';
+            }
+        } else {
+            if (lastRsi < 60 && lastRsi > 30) {
+                return 'fall';
+            }
+        }
+
+        return null;
+    }
+
     analyzeRSI(prices, lastPrice) {
          const rsi = this.calculateRSI(prices, this.rsiPeriod);
          const lastRsi = rsi[rsi.length - 1];

@@ -207,6 +207,17 @@ class DerivAPI {
         }, true).then(resp => resp.candles || []);
     }
 
+    getHistoricalCandles(symbol, granularity, count) {
+        return this.sendRequest({
+            ticks_history: symbol,
+            adjust_start_time: 1,
+            count: count,
+            end: 'latest',
+            style: 'candles',
+            granularity: granularity
+        }, true).then(resp => resp.candles || []);
+    }
+
     placeTrade(direction, amount, duration, symbol) {
         const contractType = direction === 'rise' ? 'CALL' : 'PUT';
 
