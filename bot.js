@@ -678,7 +678,14 @@ class TradingBot {
         else if (probBuy < (1 - threshold)) finalBuy = probBuy;
         else return null;
 
-        return { buy: finalBuy, sell: 1 - finalBuy };
+        return {
+            buy: finalBuy,
+            sell: 1 - finalBuy,
+            // Pass metadata for RL learning later
+            regimeId: prediction.regimeId,
+            rlAction: prediction.rlAction,
+            confidenceBucket: Math.min(4, Math.floor(prediction.confidence * 5))
+        };
     }
 
     qtSuperpositionEngine(direction, score) {
@@ -857,6 +864,20 @@ class TradingBot {
                         this.aiFilter.addSample(seq, label);
                         this.log(`AI Memory Updated with Grade ${grade} Trade (Label: ${label}).`);
                     }
+                }
+            }
+
+            // Reinforcement Learning Update
+            // We need the state and action from the time of trade.
+            // stored in reasoning.ai
+            if (this.currentTradeReasoning && this.currentTradeReasoning.ai) {
+                const aiData = this.currentTradeReasoning.ai;
+                if (aiData.regimeId !== undefined && aiData.rlAction !== undefined && this.aiFilter.updateRL) {
+                    const reward = isWin ? 1 : -1;
+                    // State: [Regime, ConfidenceBucket]
+                    const state = [aiData.regimeId, aiData.confidenceBucket || 0];
+                    this.aiFilter.updateRL(state, aiData.rlAction, reward);
+                    this.log(`AI RL Updated: Action ${aiData.rlAction}, Reward ${reward}`);
                 }
             }
         }
