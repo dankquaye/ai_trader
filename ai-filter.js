@@ -2,6 +2,14 @@
 // Implements: Meta-Signal Confidence, Outcome-Predictive Models, Regime Classification,
 // Temporal Pattern Recognition (LSTM), Drift Detection, Ensemble Voting, RL, Explainability.
 
+/**
+ * Advanced AI Filter using TensorFlow.js
+ * Features:
+ * - LSTM Ensemble for Temporal Pattern Recognition
+ * - Regime Classification (Trending, Ranging, Volatile)
+ * - Reinforcement Learning (Q-Learning) for Dynamic Thresholding
+ * - Online Learning with Drift Detection
+ */
 class AIFilter {
     constructor() {
         this.models = []; // Ensemble of LSTM models
@@ -25,6 +33,9 @@ class AIFilter {
         this.ensembleSize = 3;
     }
 
+    /**
+     * Initialize the AI engine
+     */
     async init() {
         if (!window.tf) {
             console.error('TensorFlow.js not loaded');
@@ -42,7 +53,7 @@ class AIFilter {
         // Initialize Ensemble
         this.models = [];
         for(let i=0; i<this.ensembleSize; i++) {
-            this.models.push(this.createLSTMModel(i));
+            this.models.push(this.createLSTMModel());
         }
 
         // Initialize Regime Classifier
@@ -51,7 +62,11 @@ class AIFilter {
         this.log(`AI Initialized: ${this.ensembleSize} LSTM Models + Regime Classifier + RL Agent`);
     }
 
-    createLSTMModel(seed) {
+    /**
+     * Create a standardized LSTM Model
+     * @returns {tf.Sequential}
+     */
+    createLSTMModel() {
         const model = tf.sequential();
 
         // Input Shape: [TimeSteps, Features]
@@ -81,6 +96,10 @@ class AIFilter {
         return model;
     }
 
+    /**
+     * Create Regime Classifier Model
+     * @returns {tf.Sequential}
+     */
     createRegimeModel() {
         // Simple classifier for Market Regime based on single snapshot features
         const model = tf.sequential();
@@ -97,7 +116,12 @@ class AIFilter {
 
     // --- Data Management (Online Learning) ---
 
-    addSample(historySequence, label, regimeLabel = null) {
+    /**
+     * Add a sample to the memory buffer for online learning
+     * @param {number[][]} historySequence - [TimeSteps, Features]
+     * @param {number} label - 0 or 1
+     */
+    addSample(historySequence, label) {
         // historySequence must be [LookBack, Features]
         if (!historySequence || historySequence.length !== this.lookBack) return;
 
@@ -119,15 +143,21 @@ class AIFilter {
         }
     }
 
+    /**
+     * Train models on the memory buffer
+     */
     async trainMemory() {
         if (this.isTraining) return;
         this.isTraining = true;
         this.status = 'Retraining...';
 
-        const inputsTensor = tf.tensor3d(this.memory.inputs); // [Batch, Time, Feat]
-        const labelsTensor = tf.tensor2d(this.memory.labels, [this.memory.labels.length, 1]); // [Batch, 1]
+        let inputsTensor = null;
+        let labelsTensor = null;
 
         try {
+            inputsTensor = tf.tensor3d(this.memory.inputs); // [Batch, Time, Feat]
+            labelsTensor = tf.tensor2d(this.memory.labels, [this.memory.labels.length, 1]); // [Batch, 1]
+
             let totalAcc = 0;
 
             // Train Ensemble
@@ -159,14 +189,19 @@ class AIFilter {
             console.error('Training Error:', e);
             this.status = 'Training Error';
         } finally {
-            inputsTensor.dispose();
-            labelsTensor.dispose();
+            if(inputsTensor) inputsTensor.dispose();
+            if(labelsTensor) labelsTensor.dispose();
             this.isTraining = false;
         }
     }
 
     // --- Prediction Core (Ensemble & Explainability) ---
 
+    /**
+     * Make a prediction based on sequential data
+     * @param {number[][]} sequence - [TimeSteps, Features]
+     * @returns {Object|null} Prediction result
+     */
     async predict(sequence) {
         // sequence: [LookBack, Features] (2D Array)
         if (!this.isTrained || this.driftDetected) return null;
@@ -208,16 +243,6 @@ class AIFilter {
             let finalThreshold = 0.60;
             if (rlAction === 0) finalThreshold = 0.75;
             if (rlAction === 2) finalThreshold = 0.55;
-
-            // 5. Explainability (Feature Importance via Perturbation - simplified)
-            // We'll just identify the feature with max deviation from 0.5 in the last step
-            // Real SHAP is too heavy. Heuristic:
-            const features = sequence[sequence.length-1];
-            // [RSI, ADX, SMA, BB, Log, MACD, Slope, ATR]
-            const featureNames = ['RSI', 'ADX', 'SMA', 'BB', 'Mom', 'MACD', 'Slope', 'ATR'];
-            // Simple heuristic: Find which feature is most "active" (furthest from normalized mean 0.5 approx)
-            // Assuming inputs are approx 0-1 or normalized.
-            // Let's just pick the max value feature for now or implementation dependent.
 
             return {
                 probability: avgProb,
@@ -295,8 +320,6 @@ class QLAgent {
         const qs = this.getQ(state);
         const currentQ = qs[action];
         // We assume next state is not critical for this simple contextual bandit-like adaptation
-        // Standard Q-Learning: Q(s,a) = Q(s,a) + alpha * (reward + gamma * maxQ(s') - Q(s,a))
-        // Simplified (Contextual): Q(s,a) = Q(s,a) + alpha * (reward - Q(s,a))
         qs[action] = currentQ + this.alpha * (reward - currentQ);
     }
 }

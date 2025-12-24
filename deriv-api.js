@@ -1,3 +1,8 @@
+// deriv-api.js - Deriv WebSocket API Wrapper
+
+/**
+ * DerivAPI - Manages WebSocket connection and messaging
+ */
 class DerivAPI {
     constructor() {
         this.ws = null;
@@ -116,21 +121,27 @@ class DerivAPI {
         }
     }
 
-    // Promise-based request with suppression
+    /**
+     * Send a request and wait for the response
+     * @param {Object} data - Request payload
+     * @param {boolean} suppressGlobal - If true, do not emit global events for this response
+     * @returns {Promise<Object>}
+     */
     sendRequest(data, suppressGlobal = false) {
         return new Promise((resolve, reject) => {
             if (!this.isConnected) return reject(new Error('Not connected'));
             const reqId = Date.now() + Math.floor(Math.random() * 1000);
             data.req_id = reqId;
-            this.pendingRequests[reqId] = { resolve, reject, suppressGlobal };
-            this.send(data);
 
-            setTimeout(() => {
+            const timeoutId = setTimeout(() => {
                 if (this.pendingRequests[reqId]) {
                     delete this.pendingRequests[reqId];
                     reject(new Error('Request Timeout'));
                 }
             }, 30000);
+
+            this.pendingRequests[reqId] = { resolve, reject, suppressGlobal, timeoutId };
+            this.send(data);
         });
     }
 
@@ -176,7 +187,6 @@ class DerivAPI {
     }
 
     getHistory(symbol, count = 100) {
-        // If count and end='latest' are used, start is not strictly required and can sometimes conflict.
         this.send({
             ticks_history: symbol,
             adjust_start_time: 1,
@@ -187,24 +197,10 @@ class DerivAPI {
     }
 
     fetchCandles(symbol, granularity) {
-        // Suppress global event emission for this request to avoid data pollution
-        // Removing 'start: 1' as it can cause "invalid request" errors when combined with count/latest on some symbols
         return this.sendRequest({
             ticks_history: symbol,
             adjust_start_time: 1,
             count: 50,
-            end: 'latest',
-            style: 'candles',
-            granularity: granularity
-        }, true).then(resp => resp.candles || []);
-    }
-
-    // For backtesting: Fetch large block of candles
-    getHistoricalCandles(symbol, granularity, count) {
-         return this.sendRequest({
-            ticks_history: symbol,
-            adjust_start_time: 1,
-            count: count,
             end: 'latest',
             style: 'candles',
             granularity: granularity
@@ -235,11 +231,13 @@ class DerivAPI {
         // Request Matching
         if (data.req_id && this.pendingRequests[data.req_id]) {
             const req = this.pendingRequests[data.req_id];
+            clearTimeout(req.timeoutId);
             req.resolve(data);
             if (req.suppressGlobal) suppressed = true;
             delete this.pendingRequests[data.req_id];
         } else if (data.echo_req && data.echo_req.req_id && this.pendingRequests[data.echo_req.req_id]) {
             const req = this.pendingRequests[data.echo_req.req_id];
+            clearTimeout(req.timeoutId);
             req.resolve(data);
             if (req.suppressGlobal) suppressed = true;
             delete this.pendingRequests[data.echo_req.req_id];
@@ -250,14 +248,15 @@ class DerivAPI {
         if (data.error) {
             console.error('API Error:', data.error.message);
              if (data.echo_req && data.echo_req.req_id && this.pendingRequests[data.echo_req.req_id]) {
-                this.pendingRequests[data.echo_req.req_id].reject(new Error(data.error.message));
+                const req = this.pendingRequests[data.echo_req.req_id];
+                clearTimeout(req.timeoutId);
+                req.reject(new Error(data.error.message));
                 delete this.pendingRequests[data.echo_req.req_id];
              }
             if (this.msgHandlers['error']) this.msgHandlers['error'](data.error);
             return;
         }
 
-        // Stop processing if this message was meant only for a specific request (like Scanner)
         if (suppressed) return;
 
         switch (msgType) {
@@ -301,7 +300,6 @@ class DerivAPI {
                 if (this.msgHandlers['buy']) this.msgHandlers['buy'](data.buy);
 
                 const contractId = data.buy.contract_id;
-                // Important: Notify bot to clear execution timeout
                 if(window.bot && window.bot.onTradePlaced) window.bot.onTradePlaced(contractId);
 
                 this.send({ proposal_open_contract: 1, contract_id: contractId, subscribe: 1 });

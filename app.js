@@ -7,21 +7,14 @@ window.onerror = function(msg, url, lineNo, columnNo, error) {
 };
 
 // Check Dependencies
-if (typeof DerivAPI === 'undefined') {
-    console.error('DerivAPI not loaded. Check deriv-api.js');
-}
-if (typeof TradingBot === 'undefined') {
-    console.error('TradingBot not loaded. Check bot.js');
-}
+if (typeof DerivAPI === 'undefined') console.error('DerivAPI not loaded. Check deriv-api.js');
+if (typeof TradingBot === 'undefined') console.error('TradingBot not loaded. Check bot.js');
 
 window.api = new DerivAPI();
 window.bot = new TradingBot(window.api);
-// Backtester might be loaded after bot
-if (typeof Backtester !== 'undefined') {
-    window.backtester = new Backtester(window.api, window.bot);
-}
+if (typeof Backtester !== 'undefined') window.backtester = new Backtester(window.api, window.bot);
 
-// UI Elements
+// --- UI Elements ---
 const ui = {
     pages: document.querySelectorAll('.page-section'),
     navBtns: document.querySelectorAll('.nav-btn'),
@@ -117,7 +110,7 @@ const ui = {
     }
 };
 
-// Backtest Chart
+// --- Backtest Chart ---
 let btChart, btSeries;
 
 function initBacktestChart() {
@@ -136,18 +129,11 @@ function initBacktestChart() {
             vertLines: { color: '#374151' },
             horzLines: { color: '#374151' },
         },
-        rightPriceScale: {
-            borderVisible: false,
-        },
-        timeScale: {
-            borderVisible: false,
-        },
+        rightPriceScale: { borderVisible: false },
+        timeScale: { borderVisible: false },
     });
 
-    btSeries = btChart.addLineSeries({
-        color: '#4ade80',
-        lineWidth: 2,
-    });
+    btSeries = btChart.addLineSeries({ color: '#4ade80', lineWidth: 2 });
 
     new ResizeObserver(entries => {
         if (entries.length === 0 || !entries[0].contentRect) return;
@@ -161,15 +147,8 @@ window.logBacktest = (msg) => {
 };
 
 async function runBacktest() {
-    if (!window.backtester) {
-        showToast('Backtester not loaded', 'error');
-        return;
-    }
-
-    if (bot.isRunning) {
-        showToast('Please stop the bot before running a backtest', 'error');
-        return;
-    }
+    if (!window.backtester) return showToast('Backtester not loaded', 'error');
+    if (bot.isRunning) return showToast('Please stop the bot before running a backtest', 'error');
 
     const asset = ui.backtest.asset.value;
     const count = parseInt(ui.backtest.count.value);
@@ -185,25 +164,20 @@ async function runBacktest() {
 
         const result = await window.backtester.run(asset, count, strategy, duration);
 
-        // Render Results
         ui.backtest.stats.trades.innerText = result.results.totalTrades;
         ui.backtest.stats.winRate.innerText = result.results.winRate.toFixed(1) + '%';
         ui.backtest.stats.profit.innerText = '$' + result.results.totalProfit.toFixed(2);
         ui.backtest.stats.drawdown.innerText = result.results.maxDrawdown.toFixed(1) + '%';
 
-        // Color coding
         ui.backtest.stats.profit.className = result.results.totalProfit >= 0 ?
             'text-xl font-bold text-green-400' : 'text-xl font-bold text-red-400';
 
-        // Render Chart
         if(!btChart) initBacktestChart();
         btSeries.setData(result.equity);
         btChart.timeScale().fitContent();
 
-        // Render Logs
         ui.backtest.logBody.innerHTML = '';
-        const limit = 100; // Limit rendering for performance
-        const logs = [...result.trades].reverse().slice(0, limit);
+        const logs = [...result.trades].reverse().slice(0, 100);
 
         logs.forEach(t => {
             const tr = document.createElement('tr');
@@ -231,44 +205,33 @@ async function runBacktest() {
     }
 }
 
+// --- Dashboard & Updates ---
 
-// Stats Update Loop
 setInterval(() => {
     if (bot && bot.isRunning) {
-        if (ui.marketCondition) ui.marketCondition.innerText = bot.marketCondition || 'Analyzing...';
+        // UI Updates
+        if (ui.marketCondition) {
+            let conditionText = bot.marketCondition || 'Analyzing...';
+            if (bot.riskState === 'WAIT') conditionText += ' (WAIT)';
+            else if (bot.riskState === 'AGGRESSIVE') conditionText += ' (AGGRO)';
+            else if (bot.riskState === 'PROTECT') conditionText += ' (PROTECT)';
+            ui.marketCondition.innerText = conditionText;
+
+            // Color Logic
+            if (bot.riskState === 'WAIT') ui.marketCondition.className = 'font-bold text-xs sm:text-sm text-red-500 animate-pulse';
+            else if (bot.riskState === 'AGGRESSIVE') ui.marketCondition.className = 'font-bold text-xs sm:text-sm text-green-400';
+            else if (bot.riskState === 'PROTECT') ui.marketCondition.className = 'font-bold text-xs sm:text-sm text-orange-400';
+            else ui.marketCondition.className = 'font-bold text-xs sm:text-sm text-yellow-400';
+        }
+
         if (ui.signalConfidence) ui.signalConfidence.innerText = (bot.confidence || 0).toFixed(1) + '%';
+
         if (ui.marketEntropy) {
              const entropy = bot.currentEntropy || 0;
              ui.marketEntropy.innerText = entropy.toFixed(2);
-             if (entropy > 2.0) ui.marketEntropy.className = 'font-bold text-xs sm:text-sm text-red-400';
-             else ui.marketEntropy.className = 'font-bold text-xs sm:text-sm text-purple-400';
+             ui.marketEntropy.className = entropy > 2.0 ? 'font-bold text-xs sm:text-sm text-red-400' : 'font-bold text-xs sm:text-sm text-purple-400';
         }
 
-        // Update Market Condition Text with Risk State
-        let conditionText = bot.marketCondition || 'Analyzing...';
-        if (bot.riskState === 'WAIT') {
-            conditionText += ' (WAIT)';
-        } else if (bot.riskState === 'AGGRESSIVE') {
-            conditionText += ' (AGGRO)';
-        } else if (bot.riskState === 'PROTECT') {
-             conditionText += ' (PROTECT)';
-        }
-        ui.marketCondition.innerText = conditionText;
-
-        // Color coding for condition & Risk State
-        if (bot.riskState === 'WAIT') {
-             ui.marketCondition.className = 'font-bold text-xs sm:text-sm text-red-500 animate-pulse'; // Blinking Red
-        } else if (bot.riskState === 'AGGRESSIVE') {
-             ui.marketCondition.className = 'font-bold text-xs sm:text-sm text-green-400';
-        } else if (bot.riskState === 'PROTECT') {
-             ui.marketCondition.className = 'font-bold text-xs sm:text-sm text-orange-400';
-        } else if (bot.marketCondition?.includes('Trending')) {
-             ui.marketCondition.className = 'font-bold text-xs sm:text-sm text-blue-400';
-        } else {
-             ui.marketCondition.className = 'font-bold text-xs sm:text-sm text-yellow-400';
-        }
-
-        // AI Status
         if (ui.aiStatus && bot.aiFilter) {
             ui.aiStatus.innerText = bot.aiFilter.status;
             if (bot.aiFilter.isTraining) ui.aiStatus.className = 'font-bold text-xs text-yellow-400 animate-pulse';
@@ -276,7 +239,6 @@ setInterval(() => {
             else ui.aiStatus.className = 'font-bold text-xs text-gray-400';
         }
 
-        // Grade Stats
         if (bot.gradeStats && ui.gradeStats.a) {
             ui.gradeStats.a.innerText = bot.gradeStats.A;
             ui.gradeStats.b.innerText = bot.gradeStats.B;
@@ -285,26 +247,20 @@ setInterval(() => {
             ui.gradeStats.f.innerText = bot.gradeStats.F;
         }
 
-        // Live Dashboard Update
         updateLiveDashboard();
     }
 }, 500);
 
 function updateLiveDashboard() {
     if (!bot || !bot.currentTradeReasoning || !ui.dashboard.regime) return;
-
     const r = bot.currentTradeReasoning;
 
-    // Update Regime
     ui.dashboard.regime.innerText = r.marketCondition || 'Analyzing';
 
-    // Update Confidence
     ui.dashboard.confidence.innerText = (r.finalScore * 100).toFixed(1) + '%';
-    if(r.finalScore > 0.8) ui.dashboard.confidence.className = "font-bold text-green-400";
-    else if(r.finalScore < 0.6) ui.dashboard.confidence.className = "font-bold text-red-400";
-    else ui.dashboard.confidence.className = "font-bold text-yellow-400";
+    ui.dashboard.confidence.className = r.finalScore > 0.8 ? "font-bold text-green-400" :
+        (r.finalScore < 0.6 ? "font-bold text-red-400" : "font-bold text-yellow-400");
 
-    // Update AI Prob
     if (r.ai) {
         const prob = r.ai.buy > 0.5 ? r.ai.buy : r.ai.sell;
         ui.dashboard.aiProb.innerText = (prob * 100).toFixed(1) + '%';
@@ -312,13 +268,11 @@ function updateLiveDashboard() {
         ui.dashboard.aiProb.innerText = 'OFF';
     }
 
-    // Update Scores
     ui.dashboard.trend.innerText = r.trend ? (r.trend.buy > r.trend.sell ? 'UP' : 'DN') : '-';
     ui.dashboard.mom.innerText = r.momentum ? (r.momentum.buy > r.momentum.sell ? 'UP' : 'DN') : '-';
     ui.dashboard.vol.innerText = r.volatility ? r.volatility.toFixed(2) : '-';
     ui.dashboard.ai.innerText = r.ai ? (r.ai.buy > 0.5 ? 'UP' : 'DN') : '-';
 
-    // Signal
     if (bot.quantumState && bot.quantumState.pendingSignal) {
         ui.dashboard.signal.innerText = `PENDING (${bot.quantumState.confirmationTicks})`;
         ui.dashboard.signal.className = "font-bold text-yellow-500 animate-pulse";
@@ -328,15 +282,13 @@ function updateLiveDashboard() {
     }
 }
 
-// Sound Effects
+// --- Sound Effects ---
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
 function playSound(type) {
     if (audioCtx.state === 'suspended') audioCtx.resume();
-
     const osc = audioCtx.createOscillator();
     const gainNode = audioCtx.createGain();
-
     osc.connect(gainNode);
     gainNode.connect(audioCtx.destination);
 
@@ -358,10 +310,8 @@ function playSound(type) {
     }
 }
 
-// Chart Setup
-let chart;
-let candleSeries;
-let currentCandle = null;
+// --- Chart Setup ---
+let chart, candleSeries, currentCandle = null;
 
 function initChart() {
     if (typeof LightweightCharts === 'undefined') {
@@ -379,30 +329,22 @@ function initChart() {
             vertLines: { color: '#334151' },
             horzLines: { color: '#334151' },
         },
-        crosshair: {
-            mode: LightweightCharts.CrosshairMode.Normal,
-        },
-        timeScale: {
-            timeVisible: true,
-            secondsVisible: true,
-        },
+        crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+        timeScale: { timeVisible: true, secondsVisible: true },
     });
 
     candleSeries = chart.addCandlestickSeries({
-        upColor: '#4ade80',
-        downColor: '#ef4444',
-        borderDownColor: '#ef4444',
-        borderUpColor: '#4ade80',
-        wickDownColor: '#ef4444',
-        wickUpColor: '#4ade80',
+        upColor: '#4ade80', downColor: '#ef4444',
+        borderDownColor: '#ef4444', borderUpColor: '#4ade80',
+        wickDownColor: '#ef4444', wickUpColor: '#4ade80',
     });
 
     window.addEventListener('resize', () => {
-        if (chart) {
-            chart.resize(ui.chartContainer.clientWidth, ui.chartContainer.clientHeight);
-        }
+        if (chart) chart.resize(ui.chartContainer.clientWidth, ui.chartContainer.clientHeight);
     });
 }
+
+// --- UI Logic ---
 
 function renderStrategyParams(strategy) {
     const container = ui.botSettings.strategyParams;
@@ -411,42 +353,18 @@ function renderStrategyParams(strategy) {
 
     let html = '';
     if (strategy === 'rsi') {
-        html = `
-            <div class="grid grid-cols-3 gap-2">
-                <div>
-                    <label class="text-xs text-gray-400">Period</label>
-                    <input type="number" data-param="rsiPeriod" value="${bot.rsiPeriod}" class="w-full bg-gray-700 rounded px-2 py-1 text-sm">
-                </div>
-                <div>
-                    <label class="text-xs text-gray-400">Overbought</label>
-                    <input type="number" data-param="rsiOverbought" value="${bot.rsiOverbought}" class="w-full bg-gray-700 rounded px-2 py-1 text-sm">
-                </div>
-                <div>
-                    <label class="text-xs text-gray-400">Oversold</label>
-                    <input type="number" data-param="rsiOversold" value="${bot.rsiOversold}" class="w-full bg-gray-700 rounded px-2 py-1 text-sm">
-                </div>
-            </div>
-        `;
+        html = `<div class="grid grid-cols-3 gap-2">
+            <div><label class="text-xs text-gray-400">Period</label><input type="number" data-param="rsiPeriod" value="${bot.rsiPeriod}" class="w-full bg-gray-700 rounded px-2 py-1 text-sm"></div>
+            <div><label class="text-xs text-gray-400">Overbought</label><input type="number" data-param="rsiOverbought" value="${bot.rsiOverbought}" class="w-full bg-gray-700 rounded px-2 py-1 text-sm"></div>
+            <div><label class="text-xs text-gray-400">Oversold</label><input type="number" data-param="rsiOversold" value="${bot.rsiOversold}" class="w-full bg-gray-700 rounded px-2 py-1 text-sm"></div>
+        </div>`;
     } else if (strategy === 'bb') {
-        html = `
-            <div class="grid grid-cols-2 gap-2">
-                <div>
-                    <label class="text-xs text-gray-400">Period</label>
-                    <input type="number" data-param="bbPeriod" value="${bot.bbPeriod}" class="w-full bg-gray-700 rounded px-2 py-1 text-sm">
-                </div>
-                <div>
-                    <label class="text-xs text-gray-400">Std Dev</label>
-                    <input type="number" data-param="bbStdDev" value="${bot.bbStdDev}" class="w-full bg-gray-700 rounded px-2 py-1 text-sm">
-                </div>
-            </div>
-        `;
+        html = `<div class="grid grid-cols-2 gap-2">
+            <div><label class="text-xs text-gray-400">Period</label><input type="number" data-param="bbPeriod" value="${bot.bbPeriod}" class="w-full bg-gray-700 rounded px-2 py-1 text-sm"></div>
+            <div><label class="text-xs text-gray-400">Std Dev</label><input type="number" data-param="bbStdDev" value="${bot.bbStdDev}" class="w-full bg-gray-700 rounded px-2 py-1 text-sm"></div>
+        </div>`;
     } else if (strategy === 'sma') {
-        html = `
-            <div>
-                <label class="text-xs text-gray-400">SMA Period</label>
-                <input type="number" data-param="smaPeriod" value="${bot.smaPeriod}" class="w-full bg-gray-700 rounded px-2 py-1 text-sm">
-            </div>
-        `;
+        html = `<div><label class="text-xs text-gray-400">SMA Period</label><input type="number" data-param="smaPeriod" value="${bot.smaPeriod}" class="w-full bg-gray-700 rounded px-2 py-1 text-sm"></div>`;
     } else {
         container.classList.add('hidden');
         return;
@@ -470,6 +388,8 @@ function updateBotParams() {
     bot.setStrategyParams(params);
 }
 
+// --- Exposed Helpers ---
+
 window.updateRecoveryStatus = (isActive) => {
     if (isActive) {
         showToast('Entering Recovery Mode (Virtual Trading)', 'error');
@@ -489,7 +409,6 @@ window.updateRecoveryStatus = (isActive) => {
 window.updateUIStrategy = (strategy) => {
     if(ui.botSettings.strategy) {
         ui.botSettings.strategy.value = strategy;
-        // Trigger event to update params UI
         ui.botSettings.strategy.dispatchEvent(new Event('change'));
     }
 };
@@ -504,7 +423,6 @@ window.updateHealthStatus = (rate) => {
 };
 
 window.updateWatchdogStatus = (state) => {
-    // We can piggyback on the main Bot Status or a specific element
     const statusEl = document.getElementById('bot-status');
     if(!statusEl) return;
 
@@ -514,12 +432,14 @@ window.updateWatchdogStatus = (state) => {
             statusEl.className = 'font-bold text-green-500';
         }
     } else {
-        statusEl.innerText = state; // EXECUTING, LOCKED, MANAGING
+        statusEl.innerText = state;
         if (state === 'EXECUTING' || state === 'LOCKED') statusEl.className = 'font-bold text-yellow-400 animate-pulse';
         else if (state === 'MANAGING') statusEl.className = 'font-bold text-blue-400';
         else if (state === 'COOLDOWN') statusEl.className = 'font-bold text-purple-400';
     }
 };
+
+// --- Settings Persistence ---
 
 function saveSettings() {
     const settings = {
@@ -601,21 +521,18 @@ function loadSettings() {
     }
 }
 
+// --- Features ---
+
 function exportHistory() {
     if (!bot.tradeHistory || bot.tradeHistory.length === 0) {
         showToast('No trade history to export', 'error');
         return;
     }
-
     const headers = ['Time', 'Symbol', 'Type', 'Stake', 'Profit', 'Status', 'Grade'];
     const rows = bot.tradeHistory.map(t => [
         t.time, t.symbol, t.type, t.stake, t.profit, t.status, t.grade || '-'
     ]);
-
-    let csvContent = "data:text/csv;charset=utf-8,"
-        + headers.join(",") + "\n"
-        + rows.map(e => e.join(",")).join("\n");
-
+    let csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + rows.map(e => e.join(",")).join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -623,61 +540,40 @@ function exportHistory() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-
     showToast('Trade history exported!');
 }
 
-// Auto Asset Scanner
 let scanInterval = null;
-
 function startAutoScanner() {
     if (scanInterval) clearInterval(scanInterval);
     scanInterval = setInterval(async () => {
         if (!ui.botSettings.autoSelect.checked || !bot.isRunning || bot.hasOpenTrade) return;
-
         console.log('Scanning assets...');
-        // Filter assets: Volatility Indices (R_)
-        const assets = Array.from(ui.assetSelector.options)
-            .map(o => o.value)
-            .filter(v => v.startsWith('R_'));
-
+        const assets = Array.from(ui.assetSelector.options).map(o => o.value).filter(v => v.startsWith('R_'));
         let bestScore = -1;
         let bestAsset = null;
-
         const currentAsset = ui.assetSelector.value;
         let currentScore = 0;
 
         for (const asset of assets) {
             try {
-                // Fetch 1m candles for analysis
-                // Add a small delay to prevent rate limiting in loop
                 await new Promise(r => setTimeout(r, 500));
-
                 const candles = await api.fetchCandles(asset, 60);
                 const score = bot.evaluateScore(candles);
-                console.log(`Scan ${asset}: Score ${score.toFixed(1)}`);
-
                 if (asset === currentAsset) currentScore = score;
-
                 if (score > bestScore) {
                     bestScore = score;
                     bestAsset = asset;
                 }
-            } catch (e) {
-                console.warn(`Scan failed for ${asset}. Skipping.`, e.message);
-                continue; // Continue to next asset even if one fails
-            }
+            } catch (e) { continue; }
         }
 
-        // Switch if significantly better
         if (bestAsset && bestAsset !== currentAsset && bestScore > currentScore + 10) {
-            console.log(`Auto Switch: ${currentAsset} -> ${bestAsset}`);
             showToast(`Auto Select: Switching to ${bestAsset} (Score ${bestScore.toFixed(0)})`, 'success');
             ui.assetSelector.value = bestAsset;
             ui.assetSelector.dispatchEvent(new Event('change'));
         }
-
-    }, 60000); // Check every 60s
+    }, 60000);
 }
 
 function stopAutoScanner() {
@@ -687,325 +583,56 @@ function stopAutoScanner() {
     }
 }
 
-// Preset Logic
 function applyPreset(type) {
-    if (bot.isRunning) {
-        showToast('Stop the bot first!', 'error');
-        return;
-    }
+    if (bot.isRunning) return showToast('Stop the bot first!', 'error');
 
-    // Default: Reset standard values
-    ui.botSettings.autoSelect.checked = true; // Always enable auto-select for easy mode
+    ui.botSettings.autoSelect.checked = true;
     ui.inputs.duration.value = "5";
     ui.botSettings.useMartingale.checked = false;
     ui.botSettings.useSmartRisk.checked = true;
     ui.botSettings.martingaleMultiplier.value = "1.0";
-    ui.botSettings.takeProfit.value = "0"; // No hard limit by default
+    ui.botSettings.takeProfit.value = "0";
     ui.botSettings.stopLoss.value = "0";
-
-    // AI Filter always ON for "AI Setup"
     ui.botSettings.useAIFilter.checked = true;
 
     if (type === 'conservative') {
         ui.botSettings.strategy.value = "ultra_instinct";
         ui.botSettings.risk.value = "low";
-        ui.inputs.stake.value = "1.00"; // Safe start
+        ui.inputs.stake.value = "1.00";
         ui.botSettings.useFilter.checked = true;
-        ui.botSettings.adxThreshold.value = "30"; // Strict
+        ui.botSettings.adxThreshold.value = "30";
         ui.botSettings.avoidSqueeze.checked = true;
-
-        showToast('Conservative AI Preset Loaded (Ultra Instinct + Strict Filters)', 'success');
-
+        showToast('Conservative AI Preset Loaded', 'success');
     } else if (type === 'balanced') {
         ui.botSettings.strategy.value = "quantum";
         ui.botSettings.risk.value = "medium";
         ui.inputs.stake.value = "2.00";
         ui.botSettings.useFilter.checked = true;
-        ui.botSettings.adxThreshold.value = "25"; // Standard
+        ui.botSettings.adxThreshold.value = "25";
         ui.botSettings.avoidSqueeze.checked = true;
-
-        showToast('Balanced AI Preset Loaded (Quantum + Dynamic)', 'success');
-
+        showToast('Balanced AI Preset Loaded', 'success');
     } else if (type === 'growth') {
-        ui.botSettings.strategy.value = "dynamic"; // Switch between strategies
+        ui.botSettings.strategy.value = "dynamic";
         ui.botSettings.risk.value = "high";
         ui.inputs.stake.value = "5.00";
         ui.botSettings.useFilter.checked = true;
-        ui.botSettings.adxThreshold.value = "20"; // More trades
-        ui.botSettings.avoidSqueeze.checked = false; // Trade breakouts
-
-        showToast('Growth AI Preset Loaded (Dynamic + Aggressive)', 'success');
+        ui.botSettings.adxThreshold.value = "20";
+        ui.botSettings.avoidSqueeze.checked = false;
+        showToast('Growth AI Preset Loaded', 'success');
     }
 
-    // Trigger updates
     ui.botSettings.strategy.dispatchEvent(new Event('change'));
-    ui.botSettings.autoSelect.dispatchEvent(new Event('change')); // Start scanner
+    ui.botSettings.autoSelect.dispatchEvent(new Event('change'));
     saveSettings();
 }
 
-// Event Listeners
-function setupEventListeners() {
-    if (!ui.navBtns || ui.navBtns.length === 0) return;
+// --- Modal Logic ---
 
-    // Navigation
-    ui.navBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-            const target = btn.dataset.target;
-            ui.navBtns.forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            ui.pages.forEach(page => page.classList.toggle('hidden', page.id !== target));
-
-            if (target === 'platform' && chart) {
-                setTimeout(() => chart.resize(ui.chartContainer.clientWidth, ui.chartContainer.clientHeight), 50);
-            }
-        });
-    });
-
-    ui.accountSelector.addEventListener('change', (e) => {
-        const type = e.target.value;
-        api.setAccountType(type);
-        if(window.bot) window.bot.setAccountType(type);
-        showToast(`Switched to ${type.toUpperCase()} account`);
-        // Clear token input on switch to prompt re-entry or show stored if we implemented storage
-        ui.tokenInput.value = '';
-    });
-
-    ui.tokenInput.addEventListener('change', (e) => {
-        const token = e.target.value.trim();
-        if (token) {
-            api.setToken(token);
-            api.connect();
-        }
-    });
-
-    ui.assetSelector.addEventListener('change', (e) => {
-        const symbol = e.target.value;
-        saveSettings();
-
-        // Notify Bot (Reset State)
-        bot.setSymbol(symbol);
-
-        api.unsubscribeAll();
-        api.subscribeTicks(symbol);
-        api.subscribeCandles(symbol, 60);
-        api.subscribeCandles(symbol, 300);
-        api.getHistory(symbol);
-
-        candleSeries.setData([]);
-        currentCandle = null;
-    });
-
-    if (ui.backtest.runBtn) {
-        ui.backtest.runBtn.addEventListener('click', runBacktest);
-    }
-
-    // Preset Buttons
-    document.querySelectorAll('.btn-preset').forEach(btn => {
-        btn.addEventListener('click', () => {
-            applyPreset(btn.dataset.preset);
-        });
-    });
-
-    const allInputs = [
-        ui.inputs.duration, ui.inputs.stake,
-        ui.botSettings.risk, ui.botSettings.useMartingale, ui.botSettings.useSmartRisk,
-        ui.botSettings.martingaleMultiplier, ui.botSettings.takeProfit,
-        ui.botSettings.stopLoss, ui.botSettings.useFilter,
-        ui.botSettings.adxThreshold, ui.botSettings.avoidSqueeze,
-        ui.botSettings.useAIFilter,
-        ui.botSettings.lockParams
-    ];
-    allInputs.forEach(el => el.addEventListener('change', saveSettings));
-
-    ui.botSettings.strategy.addEventListener('change', () => {
-        const s = ui.botSettings.strategy.value;
-        renderStrategyParams(s);
-        if (bot.isRunning) bot.updateConfig(s, ui.botSettings.risk.value);
-        saveSettings();
-    });
-
-    ui.botSettings.autoSelect.addEventListener('change', (e) => {
-        saveSettings();
-        if (e.target.checked) {
-            startAutoScanner();
-            showToast('Auto Asset Selection Enabled');
-        } else {
-            stopAutoScanner();
-            showToast('Auto Asset Selection Disabled');
-        }
-    });
-
-    ui.btns.rise.addEventListener('click', () => {
-        const stake = parseFloat(ui.inputs.stake.value);
-        const duration = parseInt(ui.inputs.duration.value);
-        api.placeTrade('rise', stake, duration, api.activeSymbol);
-    });
-
-    ui.btns.fall.addEventListener('click', () => {
-        const stake = parseFloat(ui.inputs.stake.value);
-        const duration = parseInt(ui.inputs.duration.value);
-        api.placeTrade('fall', stake, duration, api.activeSymbol);
-    });
-
-    ui.btns.startBot.addEventListener('click', () => {
-        bot.updateConfig(ui.botSettings.strategy.value, ui.botSettings.risk.value);
-        updateBotParams();
-
-        bot.setStake(parseFloat(ui.inputs.stake.value));
-        bot.setDuration(parseInt(ui.inputs.duration.value), 't');
-
-        bot.setMoneyManagement(
-            ui.botSettings.useMartingale.checked,
-            parseFloat(ui.botSettings.martingaleMultiplier.value),
-            parseFloat(ui.botSettings.takeProfit.value),
-            parseFloat(ui.botSettings.stopLoss.value),
-            ui.botSettings.useSmartRisk.checked
-        );
-
-        bot.setFilter(
-            ui.botSettings.useFilter.checked,
-            parseFloat(ui.botSettings.adxThreshold.value),
-            ui.botSettings.avoidSqueeze.checked
-        );
-
-        bot.setAIFilter(ui.botSettings.useAIFilter.checked);
-
-        bot.start();
-        ui.btns.startBot.classList.add('hidden');
-        ui.btns.stopBot.classList.remove('hidden');
-        ui.btns.pauseBot.classList.remove('hidden');
-        ui.btns.killSwitch.classList.remove('hidden'); // Show Kill Switch
-
-        // Reset Pause UI
-        ui.btns.pauseBot.innerHTML = '<i class="fa-solid fa-pause"></i>';
-        ui.btns.pauseBot.className = 'w-1/3 bg-yellow-600 hover:bg-yellow-500 py-3 rounded font-bold shadow-lg text-sm';
-
-        document.getElementById('bot-status').innerText = 'RUNNING';
-        document.getElementById('bot-status').className = 'font-bold text-green-500';
-    });
-
-    ui.btns.stopBot.addEventListener('click', () => {
-        bot.stop();
-        ui.btns.startBot.classList.remove('hidden');
-        ui.btns.stopBot.classList.add('hidden');
-        ui.btns.pauseBot.classList.add('hidden');
-        ui.btns.killSwitch.classList.add('hidden'); // Hide Kill Switch
-
-        document.getElementById('bot-status').innerText = 'STOPPED';
-        document.getElementById('bot-status').className = 'font-bold text-red-500';
-    });
-
-    ui.btns.pauseBot.addEventListener('click', () => {
-        const isPaused = bot.togglePause();
-        const status = document.getElementById('bot-status');
-
-        if (isPaused) {
-            ui.btns.pauseBot.innerHTML = '<i class="fa-solid fa-play"></i>';
-            ui.btns.pauseBot.className = 'w-1/3 bg-green-600 hover:bg-green-500 py-3 rounded font-bold shadow-lg text-sm';
-            status.innerText = 'PAUSED';
-            status.className = 'font-bold text-yellow-500 animate-pulse';
-        } else {
-            ui.btns.pauseBot.innerHTML = '<i class="fa-solid fa-pause"></i>';
-            ui.btns.pauseBot.className = 'w-1/3 bg-yellow-600 hover:bg-yellow-500 py-3 rounded font-bold shadow-lg text-sm';
-            status.innerText = 'RUNNING';
-            status.className = 'font-bold text-green-500';
-        }
-    });
-
-    ui.btns.killSwitch.addEventListener('click', () => {
-        if (!confirm("EMERGENCY STOP: This will immediately disconnect the API and stop the bot. Are you sure?")) return;
-
-        bot.stop();
-        if(window.api) window.api.disconnect();
-
-        ui.btns.startBot.classList.add('hidden'); // Prevent restart without refresh
-        ui.btns.stopBot.classList.add('hidden');
-        ui.btns.pauseBot.classList.add('hidden');
-        ui.btns.killSwitch.classList.add('hidden');
-
-        const status = document.getElementById('bot-status');
-        status.innerText = 'TERMINATED';
-        status.className = 'font-bold text-red-600 animate-pulse text-xl';
-
-        showToast('KILL SWITCH ACTIVATED. SESSION TERMINATED.', 'error');
-
-        // Visual Alarm
-        document.body.style.border = "5px solid red";
-    });
-
-    ui.botSettings.lockParams.addEventListener('change', (e) => {
-        bot.setParamLock(e.target.checked);
-        saveSettings();
-    });
-
-    if(ui.btns.exportHistory) {
-        ui.btns.exportHistory.addEventListener('click', exportHistory);
-    }
-
-    if(ui.btns.sendSupport) {
-        ui.btns.sendSupport.addEventListener('click', () => {
-            showToast('Message sent to support!', 'success');
-            const form = ui.btns.sendSupport.parentElement;
-            form.reset();
-        });
-    }
-
-    if(ui.btns.loadChallenge) {
-        ui.btns.loadChallenge.addEventListener('click', () => {
-            if(bot.isRunning) {
-                showToast('Stop the bot first!', 'error');
-                return;
-            }
-
-            // Load Small Account Settings (Efficiency Mode)
-            ui.inputs.stake.value = "0.35";
-            ui.inputs.duration.value = "3"; // Faster turnover for growth
-            ui.botSettings.strategy.value = "ultra_instinct"; // Higher precision
-            ui.botSettings.risk.value = "high"; // Use stricter params but allow growth
-
-            // Disable Martingale (Too risky for small accounts)
-            ui.botSettings.useMartingale.checked = false;
-            // Enable Smart Risk (which now handles 5% compounding)
-            ui.botSettings.useSmartRisk.checked = true;
-            ui.botSettings.martingaleMultiplier.value = "1.0";
-
-            // Dynamic Goals (Assuming ~$10 start)
-            ui.botSettings.takeProfit.value = "0"; // Let compounding run
-            ui.botSettings.stopLoss.value = "2";   // Hard stop
-
-            ui.botSettings.useFilter.checked = true;
-            ui.botSettings.adxThreshold.value = "25";
-            ui.botSettings.avoidSqueeze.checked = true;
-
-            // Enable Small Account Mode
-            bot.setSmallAccountMode(true);
-
-            // Trigger events to save and update UI
-            ui.botSettings.strategy.dispatchEvent(new Event('change'));
-            saveSettings();
-
-            showToast('Small Account Efficiency Mode Loaded! (Compounding + Sniper Entry)', 'success');
-        });
-    }
-
-    // Modal Events
-    ui.modal.closes.forEach(btn => {
-        btn.addEventListener('click', closeModal);
-    });
-
-    ui.modal.el.addEventListener('click', (e) => {
-        if(e.target === ui.modal.el || e.target.classList.contains('modal-overlay')) {
-            closeModal();
-        }
-    });
-}
-
-// Modal Logic
 function openModal(tradeId) {
     const trade = bot.tradeHistory[tradeId];
     if (!trade) return;
-
     const r = trade.reasoning;
+
     let html = `
         <div class="mb-4">
             <h5 class="font-bold text-gray-400 uppercase text-xs mb-1">Overview</h5>
@@ -1023,50 +650,21 @@ function openModal(tradeId) {
             <div class="mb-4">
                 <h5 class="font-bold text-gray-400 uppercase text-xs mb-1">Engine Scores</h5>
                 <div class="space-y-1 text-xs">
-                    <div class="flex justify-between border-b border-gray-700 pb-1">
-                        <span>Trend Engine</span>
-                        <span class="font-mono ${r.trend?.buy > 0.5 ? 'text-green-400' : 'text-red-400'}">
-                            B:${(r.trend?.buy*100).toFixed(0)}% S:${(r.trend?.sell*100).toFixed(0)}%
-                        </span>
-                    </div>
-                    <div class="flex justify-between border-b border-gray-700 pb-1">
-                        <span>Momentum Engine</span>
-                         <span class="font-mono ${r.momentum?.buy > 0.5 ? 'text-green-400' : 'text-red-400'}">
-                            B:${(r.momentum?.buy*100).toFixed(0)}% S:${(r.momentum?.sell*100).toFixed(0)}%
-                        </span>
-                    </div>
-                    <div class="flex justify-between border-b border-gray-700 pb-1">
-                        <span>Volatility Engine</span>
-                        <span class="font-mono text-blue-400">${(r.volatility || 0).toFixed(2)}</span>
-                    </div>
-                     <div class="flex justify-between border-b border-gray-700 pb-1">
-                        <span>Noise Engine</span>
-                        <span class="font-mono text-purple-400">${(r.noise || 0).toFixed(2)}</span>
-                    </div>
+                    <div class="flex justify-between border-b border-gray-700 pb-1"><span>Trend Engine</span><span class="font-mono ${r.trend?.buy > 0.5 ? 'text-green-400' : 'text-red-400'}">B:${(r.trend?.buy*100).toFixed(0)}% S:${(r.trend?.sell*100).toFixed(0)}%</span></div>
+                    <div class="flex justify-between border-b border-gray-700 pb-1"><span>Momentum Engine</span><span class="font-mono ${r.momentum?.buy > 0.5 ? 'text-green-400' : 'text-red-400'}">B:${(r.momentum?.buy*100).toFixed(0)}% S:${(r.momentum?.sell*100).toFixed(0)}%</span></div>
+                    <div class="flex justify-between border-b border-gray-700 pb-1"><span>Volatility Engine</span><span class="font-mono text-blue-400">${(r.volatility || 0).toFixed(2)}</span></div>
+                    <div class="flex justify-between border-b border-gray-700 pb-1"><span>Noise Engine</span><span class="font-mono text-purple-400">${(r.noise || 0).toFixed(2)}</span></div>
                 </div>
             </div>
         `;
-
         if (r.ai) {
-             html += `
-            <div class="mb-4">
-                <h5 class="font-bold text-gray-400 uppercase text-xs mb-1">AI Insight</h5>
-                 <div class="bg-gray-900 p-2 rounded text-xs space-y-1">
-                    <div class="flex justify-between">
-                        <span>Prediction:</span>
-                        <span class="${r.ai.buy > 0.5 ? 'text-green-400' : 'text-red-400'} font-bold">
-                            ${r.ai.buy > 0.5 ? 'RISE' : 'FALL'} (${(Math.max(r.ai.buy, r.ai.sell)*100).toFixed(1)}%)
-                        </span>
-                    </div>
-                 </div>
-            </div>`;
+             html += `<div class="mb-4"><h5 class="font-bold text-gray-400 uppercase text-xs mb-1">AI Insight</h5><div class="bg-gray-900 p-2 rounded text-xs space-y-1"><div class="flex justify-between"><span>Prediction:</span><span class="${r.ai.buy > 0.5 ? 'text-green-400' : 'text-red-400'} font-bold">${r.ai.buy > 0.5 ? 'RISE' : 'FALL'} (${(Math.max(r.ai.buy, r.ai.sell)*100).toFixed(1)}%)</span></div></div></div>`;
         }
     } else {
         html += `<p class="text-gray-500 italic">Detailed reasoning not available for this trade.</p>`;
     }
 
     ui.modal.body.innerHTML = html;
-
     document.body.classList.add('modal-active');
     ui.modal.el.classList.remove('opacity-0', 'pointer-events-none');
 }
@@ -1076,18 +674,14 @@ function closeModal() {
     ui.modal.el.classList.add('opacity-0', 'pointer-events-none');
 }
 
-// UI Helpers
 window.updateTradeHistory = (history, totalProfit, wins, losses) => {
     ui.botTotalProfit.innerText = `$${totalProfit.toFixed(2)}`;
     ui.botTotalProfit.className = totalProfit >= 0 ? 'font-bold text-green-400' : 'font-bold text-red-400';
-
     ui.historyTable.innerHTML = '';
     const displayHistory = [...history].reverse().slice(0, 50);
 
     displayHistory.forEach((trade, index) => {
-        // Correct index relative to original array for modal lookup
         const originalIndex = history.length - 1 - index;
-
         const tr = document.createElement('tr');
         tr.className = 'border-b border-gray-700 hover:bg-gray-700 transition cursor-pointer';
         const color = trade.profit >= 0 ? 'text-green-400' : 'text-red-400';
@@ -1100,30 +694,17 @@ window.updateTradeHistory = (history, totalProfit, wins, losses) => {
             <td class="px-6 py-4">$${trade.stake}</td>
             <td class="px-6 py-4 font-bold ${color}">$${trade.profit.toFixed(2)}</td>
             <td class="px-6 py-4 font-bold ${gradeColor}">${trade.grade || '-'}</td>
-            <td class="px-6 py-4">
-                <button class="text-xs bg-blue-900 text-blue-300 px-2 py-1 rounded hover:bg-blue-800" onclick="event.stopPropagation(); openModal(${originalIndex})">
-                    <i class="fa-solid fa-magnifying-glass"></i> Details
-                </button>
-            </td>
+            <td class="px-6 py-4"><button class="text-xs bg-blue-900 text-blue-300 px-2 py-1 rounded hover:bg-blue-800" onclick="event.stopPropagation(); openModal(${originalIndex})"><i class="fa-solid fa-magnifying-glass"></i> Details</button></td>
         `;
-
         tr.onclick = () => openModal(originalIndex);
-
         ui.historyTable.appendChild(tr);
     });
 };
 
 function aggregateTick(time, price) {
     const candleTime = Math.floor(time / 5) * 5;
-
     if (!currentCandle || candleTime > currentCandle.time) {
-        currentCandle = {
-            time: candleTime,
-            open: price,
-            high: price,
-            low: price,
-            close: price
-        };
+        currentCandle = { time: candleTime, open: price, high: price, low: price, close: price };
         return { isNew: true, candle: currentCandle };
     } else {
         currentCandle.high = Math.max(currentCandle.high, price);
@@ -1133,42 +714,34 @@ function aggregateTick(time, price) {
     }
 }
 
+// --- API Events ---
+
 function setupApiCallbacks() {
     api.on('authorize', (data) => {
         ui.profile.loginid.innerText = `ID: ${data.loginid}`;
         ui.profile.currency.innerText = 'USD';
-
-        ui.connectionStatus.classList.remove('bg-red-500');
+        ui.connectionStatus.classList.remove('bg-red-500', 'animate-pulse');
         ui.connectionStatus.classList.add('bg-green-500');
         ui.connectionStatus.title = "Connected";
-        ui.connectionStatus.classList.remove('animate-pulse');
 
         const symbol = ui.assetSelector.value;
         api.subscribeTicks(symbol);
         api.subscribeCandles(symbol, 60);
         api.subscribeCandles(symbol, 300);
         api.getHistory(symbol);
-
         showToast(`Authorized as ${data.loginid}`);
     });
 
     api.on('balance', (data) => {
         const bal = parseFloat(data.balance);
-        const currency = data.currency;
-        ui.balanceDisplay.innerText = `${bal.toFixed(2)} ${currency}`;
-        ui.profile.balance.innerText = `${bal.toFixed(2)} ${currency}`;
-
-        // Update global bot balance reference for dynamic calculations
+        ui.balanceDisplay.innerText = `${bal.toFixed(2)} ${data.currency}`;
+        ui.profile.balance.innerText = `${bal.toFixed(2)} ${data.currency}`;
         window.botBalance = bal;
-        if(window.bot && window.bot.dailyStartBalance === 0) {
-            window.bot.dailyStartBalance = bal;
-        }
+        if(window.bot && window.bot.dailyStartBalance === 0) window.bot.dailyStartBalance = bal;
 
-        // Safety: Auto-Stop if breached Max Daily Loss
         if (window.bot && window.bot.isRunning && window.bot.dailyStartBalance > 0) {
-            const lossLimit = window.bot.accountType === 'live' ? 0.10 : 0.15; // 10% Live, 15% Demo
+            const lossLimit = window.bot.accountType === 'live' ? 0.10 : 0.15;
             const drawdown = (window.bot.dailyStartBalance - bal) / window.bot.dailyStartBalance;
-
             if (drawdown >= lossLimit) {
                 window.bot.stop();
                 showToast(`Max Daily Loss Limit Hit (${(lossLimit*100).toFixed(0)}%). Bot Stopped.`, 'error');
@@ -1180,20 +753,12 @@ function setupApiCallbacks() {
         const { times, prices } = data;
         const candles = [];
         currentCandle = null;
-
         for (let i = 0; i < times.length; i++) {
              const time = times[i];
              const price = prices[i];
-
              const candleTime = Math.floor(time / 5) * 5;
              if (candles.length === 0 || candles[candles.length - 1].time !== candleTime) {
-                 candles.push({
-                     time: candleTime,
-                     open: price,
-                     high: price,
-                     low: price,
-                     close: price
-                 });
+                 candles.push({ time: candleTime, open: price, high: price, low: price, close: price });
              } else {
                  const last = candles[candles.length - 1];
                  last.high = Math.max(last.high, price);
@@ -1201,18 +766,11 @@ function setupApiCallbacks() {
                  last.close = price;
              }
         }
-
-        if (candles.length > 0) {
-            currentCandle = candles[candles.length - 1];
-        }
-
+        if (candles.length > 0) currentCandle = candles[candles.length - 1];
         candleSeries.setData(candles);
     });
 
-    api.on('ohlc', (candle) => {
-        bot.processCandle(candle, candle.granularity);
-    });
-
+    api.on('ohlc', (candle) => bot.processCandle(candle, candle.granularity));
     api.on('candles', (candles) => {
         if (candles.length > 0) {
             const diff = candles[1].epoch - candles[0].epoch;
@@ -1222,23 +780,16 @@ function setupApiCallbacks() {
     });
 
     api.on('tick', (tick) => {
-        const price = tick.quote;
-        const time = tick.epoch;
-
         bot.processTick(tick);
-
-        const result = aggregateTick(time, price);
+        const result = aggregateTick(tick.epoch, tick.quote);
         candleSeries.update(result.candle);
     });
 
-    api.on('buy', (data) => {
-        showToast(`Order Placed! Buy Price: ${data.buy_price}`);
-    });
+    api.on('buy', (data) => showToast(`Order Placed! Buy Price: ${data.buy_price}`));
 
     api.on('contract_finish', (contract) => {
         bot.handleTradeResult(contract);
         api.send({ balance: 1, subscribe: 0 });
-
         const profit = parseFloat(contract.profit);
         if (profit > 0) {
             showToast(`Trade WON! +$${profit.toFixed(2)}`, 'success');
@@ -1249,12 +800,16 @@ function setupApiCallbacks() {
         }
     });
 
-    api.on('error', (error) => {
-        showToast(`Error: ${error.message}`, 'error');
-    });
+    api.on('error', (error) => showToast(`Error: ${error.message}`, 'error'));
 }
 
+const activeToasts = [];
 function showToast(message, type = 'info') {
+    if (activeToasts.length > 3) {
+        const old = activeToasts.shift();
+        if(old) old.remove();
+    }
+
     const container = document.getElementById('toast-container');
     if (!container) return;
     const toast = document.createElement('div');
@@ -1263,17 +818,19 @@ function showToast(message, type = 'info') {
     if (type === 'error') colorClass = 'bg-red-600';
     if (type === 'success') colorClass = 'bg-green-600';
 
-    toast.className = `${colorClass} text-white px-6 py-3 rounded shadow-lg toast flex items-center`;
-    toast.innerHTML = `
-        <i class="fa-solid ${type === 'error' ? 'fa-circle-exclamation' : 'fa-circle-info'} mr-2"></i>
-        <span>${message}</span>
-    `;
+    toast.className = `${colorClass} text-white px-6 py-3 rounded shadow-lg toast flex items-center mb-2 transition-all duration-300`;
+    toast.innerHTML = `<i class="fa-solid ${type === 'error' ? 'fa-circle-exclamation' : 'fa-circle-info'} mr-2"></i><span>${message}</span>`;
 
     container.appendChild(toast);
+    activeToasts.push(toast);
 
     setTimeout(() => {
         toast.style.opacity = '0';
-        setTimeout(() => toast.remove(), 300);
+        setTimeout(() => {
+            toast.remove();
+            const idx = activeToasts.indexOf(toast);
+            if (idx > -1) activeToasts.splice(idx, 1);
+        }, 300);
     }, 3000);
 }
 
@@ -1283,7 +840,6 @@ document.addEventListener('DOMContentLoaded', () => {
         setupEventListeners();
         setupApiCallbacks();
         loadSettings();
-        // Do not auto-connect. User must provide token.
         showToast('Please enter your API Token to connect.', 'info');
     } catch (e) {
         console.error('Init Error:', e);
