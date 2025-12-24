@@ -834,6 +834,25 @@ function showToast(message, type = 'info') {
     }, 3000);
 }
 
+function setupEventListeners() {
+    // Modal Close
+    ui.modal.closes.forEach(btn => {
+        btn.addEventListener('click', closeModal);
+    });
+    // Close modal on background click
+    ui.modal.el.addEventListener('click', (e) => {
+        if (e.target === ui.modal.el || e.target.classList.contains('modal-overlay')) {
+            closeModal();
+        }
+    });
+    // Close on Escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && document.body.classList.contains('modal-active')) {
+            closeModal();
+        }
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     try {
         initChart();
