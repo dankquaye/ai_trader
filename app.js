@@ -666,12 +666,12 @@ function openModal(tradeId) {
 
     ui.modal.body.innerHTML = html;
     document.body.classList.add('modal-active');
-    ui.modal.el.classList.remove('opacity-0', 'pointer-events-none');
+    ui.modal.el.classList.remove('opacity-0', 'pointer-events-none', 'invisible');
 }
 
 function closeModal() {
     document.body.classList.remove('modal-active');
-    ui.modal.el.classList.add('opacity-0', 'pointer-events-none');
+    ui.modal.el.classList.add('opacity-0', 'pointer-events-none', 'invisible');
 }
 
 window.updateTradeHistory = (history, totalProfit, wins, losses) => {
