@@ -38,12 +38,12 @@
             </button>
 
             <!-- Connection Status -->
-            <div id="connection-status" class="w-3 h-3 rounded-full bg-red-500 animate-pulse" title="Disconnected"></div>
+            <div id="connection-status" class="w-3 h-3 rounded-full bg-red-500 animate-pulse" title="Disconnected" role="status" aria-label="Connection Status: Disconnected"></div>
 
             <div id="balance-display" class="font-mono text-green-400 font-bold text-sm sm:text-base">Checking...</div>
             <div class="flex items-center space-x-2">
-                <input type="password" id="api-token-input" placeholder="API Token" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs w-24 sm:w-32 focus:outline-none focus:border-blue-500">
-                <select id="account-selector" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs sm:text-sm focus:outline-none focus:border-blue-500 max-w-[120px] sm:max-w-none">
+                <input type="password" id="api-token-input" placeholder="API Token" aria-label="Deriv API Token" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs w-24 sm:w-32 focus:outline-none focus:border-blue-500">
+                <select id="account-selector" aria-label="Account Type" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs sm:text-sm focus:outline-none focus:border-blue-500 max-w-[120px] sm:max-w-none">
                     <option value="demo">Demo</option>
                     <option value="live">Live</option>
                 </select>
@@ -139,12 +139,12 @@
                 <div class="bg-gray-800 p-4 border-t border-gray-700 grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 items-end shrink-0">
                     <!-- Time -->
                     <div class="flex flex-col">
-                        <label class="text-xs text-gray-400 mb-1">Duration (t)</label>
+                        <label for="duration" class="text-xs text-gray-400 mb-1">Duration (t)</label>
                         <input type="number" id="duration" value="5" min="1" max="10" class="bg-gray-700 rounded px-2 py-2 text-center font-bold">
                     </div>
                     <!-- Amount -->
                     <div class="flex flex-col">
-                        <label class="text-xs text-gray-400 mb-1">Stake ($)</label>
+                        <label for="stake" class="text-xs text-gray-400 mb-1">Stake ($)</label>
                         <input type="number" id="stake" value="10" min="0.35" step="0.5" class="bg-gray-700 rounded px-2 py-2 text-center font-bold">
                     </div>
                     <!-- Buttons -->
