@@ -666,12 +666,15 @@ function openModal(tradeId) {
 
     ui.modal.body.innerHTML = html;
     document.body.classList.add('modal-active');
-    ui.modal.el.classList.remove('opacity-0', 'pointer-events-none');
+    ui.modal.el.classList.remove('opacity-0', 'pointer-events-none', 'hidden');
+    // Trap focus
+    const closeBtn = ui.modal.el.querySelector('.modal-close');
+    if (closeBtn) closeBtn.focus();
 }
 
 function closeModal() {
     document.body.classList.remove('modal-active');
-    ui.modal.el.classList.add('opacity-0', 'pointer-events-none');
+    ui.modal.el.classList.add('opacity-0', 'pointer-events-none', 'hidden');
 }
 
 window.updateTradeHistory = (history, totalProfit, wins, losses) => {
@@ -846,3 +849,153 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast('Initialization Error: ' + e.message, 'error');
     }
 });
+// --- Event Listeners ---
+
+function setupEventListeners() {
+    // Navigation
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const target = btn.dataset.target;
+            ui.pages.forEach(p => p.classList.add('hidden'));
+            document.getElementById(target).classList.remove('hidden');
+            ui.navBtns.forEach(b => b.classList.remove('active', 'text-blue-500'));
+            btn.classList.add('active', 'text-blue-500');
+        });
+    });
+
+    // Asset Selection
+    if (ui.assetSelector) {
+        ui.assetSelector.addEventListener('change', () => {
+            const symbol = ui.assetSelector.value;
+            if (chart) {
+                // Reset chart logic if needed
+            }
+            api.send({ ticks_history: symbol, end: 'latest', count: 1000, style: 'candles', granularity: 60 });
+            api.subscribeTicks(symbol);
+            saveSettings();
+        });
+    }
+
+    // Inputs
+    if (ui.tokenInput) {
+        ui.tokenInput.addEventListener('change', () => {
+            const token = ui.tokenInput.value;
+            if (token) {
+                api.authorize(token);
+                ui.tokenInput.value = ''; // clear for security
+            }
+        });
+    }
+
+    if (ui.accountSelector) {
+        ui.accountSelector.addEventListener('change', () => {
+            window.location.reload();
+        });
+    }
+
+    // Bot Controls
+    if (ui.btns.startBot) {
+        ui.btns.startBot.addEventListener('click', () => {
+            if (!bot.isRunning) {
+                bot.start();
+                ui.btns.startBot.classList.add('hidden');
+                ui.btns.stopBot.classList.remove('hidden');
+                ui.btns.pauseBot.classList.remove('hidden');
+                ui.btns.killSwitch.classList.remove('hidden');
+            }
+        });
+    }
+
+    if (ui.btns.stopBot) {
+        ui.btns.stopBot.addEventListener('click', () => {
+            if (bot.isRunning) {
+                bot.stop();
+                ui.btns.stopBot.classList.add('hidden');
+                ui.btns.pauseBot.classList.add('hidden');
+                ui.btns.killSwitch.classList.add('hidden');
+                ui.btns.startBot.classList.remove('hidden');
+            }
+        });
+    }
+
+    if (ui.btns.pauseBot) {
+        ui.btns.pauseBot.addEventListener('click', () => {
+            // Toggle pause logic
+        });
+    }
+
+    if (ui.btns.killSwitch) {
+        ui.btns.killSwitch.addEventListener('click', () => {
+            bot.stop();
+            window.location.reload();
+        });
+    }
+
+    // Manual Trade
+    if (ui.btns.rise) {
+        ui.btns.rise.addEventListener('click', () => {
+            const stake = parseFloat(ui.inputs.stake.value);
+            const duration = parseInt(ui.inputs.duration.value);
+            api.buyContract(ui.assetSelector.value, 'CALL', stake, duration);
+        });
+    }
+
+    if (ui.btns.fall) {
+        ui.btns.fall.addEventListener('click', () => {
+            const stake = parseFloat(ui.inputs.stake.value);
+            const duration = parseInt(ui.inputs.duration.value);
+            api.buyContract(ui.assetSelector.value, 'PUT', stake, duration);
+        });
+    }
+
+    // Settings
+    Object.values(ui.botSettings).forEach(el => {
+        if (el && (el.tagName === 'INPUT' || el.tagName === 'SELECT')) {
+            el.addEventListener('change', saveSettings);
+        }
+    });
+
+    // Presets
+    document.querySelectorAll('.btn-preset').forEach(btn => {
+        btn.addEventListener('click', () => {
+            applyPreset(btn.dataset.preset);
+        });
+    });
+
+    if (ui.btns.loadChallenge) {
+        ui.btns.loadChallenge.addEventListener('click', () => {
+            applyPreset('conservative');
+            ui.inputs.stake.value = "0.35";
+            showToast('Small Account Challenge Preset Loaded');
+        });
+    }
+
+    // Backtest
+    if (ui.backtest.runBtn) {
+        ui.backtest.runBtn.addEventListener('click', runBacktest);
+    }
+
+    // Export
+    if (ui.btns.exportHistory) {
+        ui.btns.exportHistory.addEventListener('click', exportHistory);
+    }
+
+    // Modal
+    ui.modal.closes.forEach(el => {
+        el.addEventListener('click', closeModal);
+    });
+
+    // Close modal on outside click
+    ui.modal.el.addEventListener('click', (e) => {
+        if (e.target === ui.modal.el || e.target.classList.contains('modal-overlay')) {
+            closeModal();
+        }
+    });
+
+    // Keyboard accessibility for modal
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !ui.modal.el.classList.contains('opacity-0')) {
+            closeModal();
+        }
+    });
+}
