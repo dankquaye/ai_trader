@@ -666,12 +666,29 @@ function openModal(tradeId) {
 
     ui.modal.body.innerHTML = html;
     document.body.classList.add('modal-active');
+
+    // Clear any pending close timeout
+    if (window.modalCloseTimeout) {
+        clearTimeout(window.modalCloseTimeout);
+        window.modalCloseTimeout = null;
+    }
+
+    ui.modal.el.classList.remove('hidden');
+    // Force reflow to enable transition
+    void ui.modal.el.offsetWidth;
     ui.modal.el.classList.remove('opacity-0', 'pointer-events-none');
 }
 
 function closeModal() {
     document.body.classList.remove('modal-active');
     ui.modal.el.classList.add('opacity-0', 'pointer-events-none');
+
+    if (window.modalCloseTimeout) clearTimeout(window.modalCloseTimeout);
+
+    window.modalCloseTimeout = setTimeout(() => {
+        ui.modal.el.classList.add('hidden');
+        window.modalCloseTimeout = null;
+    }, 300);
 }
 
 window.updateTradeHistory = (history, totalProfit, wins, losses) => {
@@ -801,6 +818,78 @@ function setupApiCallbacks() {
     });
 
     api.on('error', (error) => showToast(`Error: ${error.message}`, 'error'));
+}
+
+function setupEventListeners() {
+    // Navigation
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const target = btn.dataset.target;
+            ui.pages.forEach(p => p.classList.add('hidden'));
+            document.getElementById(target).classList.remove('hidden');
+            ui.navBtns.forEach(b => b.classList.remove('active', 'text-blue-500'));
+            btn.classList.add('active', 'text-blue-500');
+        });
+    });
+
+    // Bot Controls
+    ui.btns.startBot.addEventListener('click', () => {
+        const token = ui.tokenInput.value;
+        if (!token) return showToast('Please enter API Token', 'error');
+        if (!api.token) api.authorize(token);
+        bot.start();
+    });
+
+    ui.btns.stopBot.addEventListener('click', () => bot.stop());
+
+    ui.btns.killSwitch.addEventListener('click', () => {
+        bot.stop();
+        showToast('KILL SWITCH ACTIVATED', 'error');
+    });
+
+    // Manual Trade
+    ui.btns.rise.addEventListener('click', () => {
+        if (!bot.isRunning) return showToast('Bot must be running to trade', 'error');
+        api.buyContract(ui.assetSelector.value, 'CALL', ui.inputs.stake.value, ui.inputs.duration.value);
+    });
+
+    ui.btns.fall.addEventListener('click', () => {
+        if (!bot.isRunning) return showToast('Bot must be running to trade', 'error');
+        api.buyContract(ui.assetSelector.value, 'PUT', ui.inputs.stake.value, ui.inputs.duration.value);
+    });
+
+    // Modal
+    ui.modal.closes.forEach(btn => btn.addEventListener('click', closeModal));
+
+    // Bot Settings
+    if (ui.botSettings.strategy) {
+        ui.botSettings.strategy.addEventListener('change', () => {
+            renderStrategyParams(ui.botSettings.strategy.value);
+            saveSettings();
+        });
+    }
+
+    // Auto-save on change for all inputs
+    document.querySelectorAll('input, select').forEach(el => {
+        el.addEventListener('change', saveSettings);
+    });
+
+    // Preset Buttons
+    document.querySelectorAll('.btn-preset').forEach(btn => {
+        btn.addEventListener('click', () => applyPreset(btn.dataset.preset));
+    });
+
+    if (ui.btns.loadChallenge) {
+        ui.btns.loadChallenge.addEventListener('click', () => applyPreset('challenge')); // Assuming challenge preset logic exists or similar
+    }
+
+    if (ui.btns.exportHistory) {
+        ui.btns.exportHistory.addEventListener('click', exportHistory);
+    }
+
+    if (ui.backtest.runBtn) {
+        ui.backtest.runBtn.addEventListener('click', runBacktest);
+    }
 }
 
 const activeToasts = [];
