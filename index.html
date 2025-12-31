@@ -42,8 +42,8 @@
 
             <div id="balance-display" class="font-mono text-green-400 font-bold text-sm sm:text-base">Checking...</div>
             <div class="flex items-center space-x-2">
-                <input type="password" id="api-token-input" placeholder="API Token" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs w-24 sm:w-32 focus:outline-none focus:border-blue-500">
-                <select id="account-selector" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs sm:text-sm focus:outline-none focus:border-blue-500 max-w-[120px] sm:max-w-none">
+                <input type="password" id="api-token-input" aria-label="API Token" placeholder="API Token" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs w-24 sm:w-32 focus:outline-none focus:border-blue-500">
+                <select id="account-selector" aria-label="Account Type" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs sm:text-sm focus:outline-none focus:border-blue-500 max-w-[120px] sm:max-w-none">
                     <option value="demo">Demo</option>
                     <option value="live">Live</option>
                 </select>
@@ -87,7 +87,7 @@
             <section id="platform" class="page-section absolute inset-0 flex flex-col">
                 <!-- Asset Selector & Chart Header -->
                 <div class="bg-gray-800 p-2 flex space-x-4 border-b border-gray-700 shrink-0">
-                    <select id="asset-selector" class="bg-gray-700 rounded px-3 py-1 text-sm w-full md:w-auto">
+                    <select id="asset-selector" aria-label="Select Asset" class="bg-gray-700 rounded px-3 py-1 text-sm w-full md:w-auto">
                         <optgroup label="Volatility Indices">
                             <option value="R_100" selected>Volatility 100 Index</option>
                             <option value="R_75">Volatility 75 Index</option>
@@ -139,12 +139,12 @@
                 <div class="bg-gray-800 p-4 border-t border-gray-700 grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 items-end shrink-0">
                     <!-- Time -->
                     <div class="flex flex-col">
-                        <label class="text-xs text-gray-400 mb-1">Duration (t)</label>
+                        <label for="duration" class="text-xs text-gray-400 mb-1">Duration (t)</label>
                         <input type="number" id="duration" value="5" min="1" max="10" class="bg-gray-700 rounded px-2 py-2 text-center font-bold">
                     </div>
                     <!-- Amount -->
                     <div class="flex flex-col">
-                        <label class="text-xs text-gray-400 mb-1">Stake ($)</label>
+                        <label for="stake" class="text-xs text-gray-400 mb-1">Stake ($)</label>
                         <input type="number" id="stake" value="10" min="0.35" step="0.5" class="bg-gray-700 rounded px-2 py-2 text-center font-bold">
                     </div>
                     <!-- Buttons -->
@@ -521,16 +521,16 @@
     </div>
 
     <!-- Trade Reasoning Modal -->
-    <div id="reasoning-modal" class="modal opacity-0 pointer-events-none fixed w-full h-full top-0 left-0 flex items-center justify-center z-50">
+    <div id="reasoning-modal" class="modal opacity-0 pointer-events-none hidden fixed w-full h-full top-0 left-0 flex items-center justify-center z-50" role="dialog" aria-modal="true" aria-labelledby="modal-title">
         <div class="modal-overlay absolute w-full h-full bg-black opacity-75"></div>
         <div class="modal-container bg-gray-800 w-11/12 md:max-w-md mx-auto rounded shadow-lg z-50 overflow-y-auto max-h-[90vh]">
             <div class="modal-content py-4 text-left px-6">
                 <!-- Title -->
                 <div class="flex justify-between items-center pb-3 border-b border-gray-700">
-                    <p class="text-2xl font-bold">Trade Analysis</p>
-                    <div class="modal-close cursor-pointer z-50">
+                    <p id="modal-title" class="text-2xl font-bold">Trade Analysis</p>
+                    <button class="modal-close cursor-pointer z-50 text-gray-400 hover:text-white transition-colors" aria-label="Close modal">
                         <i class="fa-solid fa-xmark text-xl"></i>
-                    </div>
+                    </button>
                 </div>
 
                 <!-- Body -->
