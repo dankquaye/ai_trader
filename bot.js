@@ -600,17 +600,24 @@ class TradingBot {
 
         if (this.avoidSqueeze && width < 0.001) return null;
 
+        // Scoring for MultiTF
+        let score = 0.6; // Base score
+        if (width > 0.003) score += 0.1; // Better volatility
+        if (trend1m === 'up' && lastRsi > 50 && lastRsi < 65) score += 0.15; // Strong bullish momentum
+        if (trend1m === 'down' && lastRsi < 50 && lastRsi > 35) score += 0.15; // Strong bearish momentum
+
+        this.confidence = score * 100;
+        this.currentTradeReasoning = {
+            trend: trend1m,
+            finalScore: score,
+            marketCondition: this.marketCondition
+        };
+
         // Signal
         if (trend1m === 'up') {
-            if (lastRsi > 40 && lastRsi < 70) {
-                 // Pullback check?
-                 // Simple trend following
-                 return 'rise';
-            }
+            if (lastRsi > 40 && lastRsi < 70) return 'rise';
         } else {
-            if (lastRsi < 60 && lastRsi > 30) {
-                return 'fall';
-            }
+            if (lastRsi < 60 && lastRsi > 30) return 'fall';
         }
 
         return null;
@@ -622,6 +629,19 @@ class TradingBot {
          const sma50 = this.calculateSMA(prices, 50);
          const lastSma = sma50[sma50.length - 1];
          const isUptrend = lastPrice > lastSma;
+
+         let score = 0.6;
+         // Deep overbought/oversold gives higher score
+         if (lastRsi < this.rsiOversold - 5) score += 0.2;
+         if (lastRsi > this.rsiOverbought + 5) score += 0.2;
+         if (isUptrend && lastRsi < this.rsiOversold) score += 0.1; // Trend alignment
+
+         this.confidence = score * 100;
+         this.currentTradeReasoning = {
+             finalScore: score,
+             marketCondition: this.marketCondition,
+             indicator: 'RSI Reversal'
+         };
 
          if (lastRsi < this.rsiOversold && isUptrend) return 'rise';
          if (lastRsi > this.rsiOverbought && !isUptrend) return 'fall';
@@ -637,11 +657,21 @@ class TradingBot {
          const prevSlow = slowEma[slowEma.length - 2];
 
          let adxValid = true;
+         let score = 0.6;
+
          if (this.candles1m.length > 20) {
              const closes = this.candles1m.map(c => c.close);
              const adx = this.calculateADX(closes, 14).pop() || 0;
              if (adx < 20) adxValid = false;
+             if (adx > 30) score += 0.2; // Strong trend
          }
+
+         this.confidence = score * 100;
+         this.currentTradeReasoning = {
+             finalScore: score,
+             marketCondition: this.marketCondition,
+             indicator: 'SMA Crossover'
+         };
 
          if (adxValid) {
              if (lastFast > lastSlow && prevFast <= prevSlow) return 'rise';
@@ -657,6 +687,18 @@ class TradingBot {
 
          const rsi = this.calculateRSI(prices, 14);
          const lastRsi = rsi[rsi.length - 1] || 50;
+
+         let score = 0.6;
+         if (lastPrice < lastBB.lower * 0.999) score += 0.2; // Deep breakout
+         if (lastPrice > lastBB.upper * 1.001) score += 0.2;
+         if (lastRsi < 25 || lastRsi > 75) score += 0.1;
+
+         this.confidence = score * 100;
+         this.currentTradeReasoning = {
+             finalScore: score,
+             marketCondition: this.marketCondition,
+             indicator: 'BB Reversal'
+         };
 
          if (lastPrice < lastBB.lower && lastRsi < 35) return 'rise';
          if (lastPrice > lastBB.upper && lastRsi > 65) return 'fall';
