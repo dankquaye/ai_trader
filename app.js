@@ -714,6 +714,25 @@ function aggregateTick(time, price) {
     }
 }
 
+function setupEventListeners() {
+    // Modal Interaction Logic
+    ui.modal.closes.forEach(btn => btn.addEventListener('click', closeModal));
+
+    if(ui.modal.el) {
+        ui.modal.el.addEventListener('click', (e) => {
+            // Close when clicking outside the modal content (on the overlay)
+            if (e.target === ui.modal.el || e.target.classList.contains('modal-overlay')) {
+                closeModal();
+            }
+        });
+    }
+
+    // Accessibility: Close modal on Escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeModal();
+    });
+}
+
 // --- API Events ---
 
 function setupApiCallbacks() {
