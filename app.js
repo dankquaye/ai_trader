@@ -313,6 +313,156 @@ function playSound(type) {
 // --- Chart Setup ---
 let chart, candleSeries, currentCandle = null;
 
+function setupEventListeners() {
+    // Navigation
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            ui.navBtns.forEach(b => b.classList.remove('active', 'text-blue-500'));
+            btn.classList.add('active', 'text-blue-500');
+
+            ui.pages.forEach(p => p.classList.add('hidden'));
+            document.getElementById(btn.dataset.target).classList.remove('hidden');
+        });
+    });
+
+    // Account & Token
+    ui.tokenInput.addEventListener('change', (e) => {
+        if(e.target.value.length > 8) {
+            api.authorize(e.target.value);
+            localStorage.setItem('derivToken', e.target.value);
+        }
+    });
+
+    const savedToken = localStorage.getItem('derivToken');
+    if(savedToken) {
+        ui.tokenInput.value = savedToken;
+        api.authorize(savedToken);
+    }
+
+    ui.accountSelector.addEventListener('change', () => {
+        // Logic to switch account type if supported by API wrapper
+        // For now, just re-authorize if token is present
+        const token = ui.tokenInput.value;
+        if(token) api.authorize(token);
+    });
+
+    // Asset Selector
+    ui.assetSelector.addEventListener('change', (e) => {
+        const symbol = e.target.value;
+        api.subscribeTicks(symbol);
+        api.subscribeCandles(symbol, 60);
+        api.subscribeCandles(symbol, 300);
+        api.getHistory(symbol);
+
+        // Reset chart
+        if(candleSeries) candleSeries.setData([]);
+        showToast(`Switched to ${symbol}`);
+        saveSettings();
+    });
+
+    // Bot Controls
+    ui.btns.startBot.addEventListener('click', () => {
+        if(!api.authorized) return showToast('Please enter API Token first', 'error');
+        bot.start();
+        ui.btns.startBot.classList.add('hidden');
+        ui.btns.stopBot.classList.remove('hidden');
+        ui.btns.pauseBot.classList.remove('hidden');
+        showToast('Bot Started', 'success');
+    });
+
+    ui.btns.stopBot.addEventListener('click', () => {
+        bot.stop();
+        ui.btns.startBot.classList.remove('hidden');
+        ui.btns.stopBot.classList.add('hidden');
+        ui.btns.pauseBot.classList.add('hidden');
+        showToast('Bot Stopped');
+    });
+
+    ui.btns.pauseBot.addEventListener('click', () => {
+         if(bot.isRunning) {
+             bot.stop();
+             showToast('Bot Paused');
+             ui.btns.pauseBot.innerHTML = '<i class="fa-solid fa-play"></i>';
+         } else {
+             bot.start();
+             showToast('Bot Resumed', 'success');
+             ui.btns.pauseBot.innerHTML = '<i class="fa-solid fa-pause"></i>';
+         }
+    });
+
+    ui.btns.killSwitch.addEventListener('click', () => {
+        bot.stop();
+        // Close all trades logic if available
+        showToast('EMERGENCY STOP ACTIVATED', 'error');
+        window.location.reload();
+    });
+
+    // Manual Trade
+    ui.btns.rise.addEventListener('click', () => {
+        if(!api.authorized) return showToast('Connect first', 'error');
+        const stake = parseFloat(ui.inputs.stake.value);
+        const duration = parseInt(ui.inputs.duration.value);
+        api.buy(ui.assetSelector.value, stake, duration, 'CALL');
+    });
+
+    ui.btns.fall.addEventListener('click', () => {
+        if(!api.authorized) return showToast('Connect first', 'error');
+        const stake = parseFloat(ui.inputs.stake.value);
+        const duration = parseInt(ui.inputs.duration.value);
+        api.buy(ui.assetSelector.value, stake, duration, 'PUT');
+    });
+
+    // Bot Settings
+    ui.botSettings.strategy.addEventListener('change', (e) => {
+        renderStrategyParams(e.target.value);
+        bot.setStrategy(e.target.value);
+        saveSettings();
+    });
+
+    // Checkboxes & Inputs
+    const settingInputs = [
+        ui.botSettings.risk, ui.botSettings.useMartingale, ui.botSettings.useSmartRisk,
+        ui.botSettings.martingaleMultiplier, ui.botSettings.takeProfit, ui.botSettings.stopLoss,
+        ui.botSettings.useFilter, ui.botSettings.adxThreshold, ui.botSettings.avoidSqueeze,
+        ui.botSettings.autoSelect, ui.botSettings.useAIFilter, ui.botSettings.lockParams,
+        ui.inputs.stake, ui.inputs.duration
+    ];
+
+    settingInputs.forEach(input => {
+        if(input) {
+            input.addEventListener('change', saveSettings);
+        }
+    });
+
+    // Presets
+    document.querySelectorAll('.btn-preset').forEach(btn => {
+        btn.addEventListener('click', () => applyPreset(btn.dataset.preset));
+    });
+
+    // Backtest
+    if(ui.backtest.runBtn) {
+        ui.backtest.runBtn.addEventListener('click', runBacktest);
+    }
+
+    // Modal
+    ui.modal.closes.forEach(el => el.addEventListener('click', closeModal));
+    ui.modal.el.addEventListener('click', (e) => {
+        if(e.target === ui.modal.el || e.target.classList.contains('modal-overlay')) closeModal();
+    });
+    document.addEventListener('keydown', (e) => {
+        if(e.key === 'Escape' && document.body.classList.contains('modal-active')) closeModal();
+    });
+
+    // Support
+    ui.btns.sendSupport.addEventListener('click', () => {
+        showToast('Message sent! Support will contact you shortly.', 'success');
+        ui.btns.sendSupport.disabled = true;
+        setTimeout(() => ui.btns.sendSupport.disabled = false, 5000);
+    });
+
+    ui.btns.exportHistory.addEventListener('click', exportHistory);
+}
+
 function initChart() {
     if (typeof LightweightCharts === 'undefined') {
         throw new Error('LightweightCharts library not loaded. Please check your internet connection.');
@@ -666,12 +816,19 @@ function openModal(tradeId) {
 
     ui.modal.body.innerHTML = html;
     document.body.classList.add('modal-active');
-    ui.modal.el.classList.remove('opacity-0', 'pointer-events-none');
+    ui.modal.el.classList.remove('hidden');
+    // Small delay to allow transition
+    requestAnimationFrame(() => {
+        ui.modal.el.classList.remove('opacity-0', 'pointer-events-none');
+    });
 }
 
 function closeModal() {
     document.body.classList.remove('modal-active');
     ui.modal.el.classList.add('opacity-0', 'pointer-events-none');
+    setTimeout(() => {
+        ui.modal.el.classList.add('hidden');
+    }, 300); // Match transition duration
 }
 
 window.updateTradeHistory = (history, totalProfit, wins, losses) => {

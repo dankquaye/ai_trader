@@ -1,0 +1,3 @@
+## 2024-05-23 - Critical Functionality Restoration & Accessibility
+**Learning:** Found that the entire event handling logic (`setupEventListeners`) was missing from the codebase, rendering the UI non-functional. UX cannot exist without functionality. Also learned that simple class toggling (`hidden`) is insufficient for accessible modals; visibility transitions need coordination with `display: none` for screen readers.
+**Action:** Always verify basic app interactivity before applying micro-UX fixes. When fixing modals, ensure `hidden` is used to remove elements from the accessibility tree when closed.
