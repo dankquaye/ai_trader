@@ -346,6 +346,31 @@ function initChart() {
 
 // --- UI Logic ---
 
+function setupEventListeners() {
+    // Only adding listener for Modal Close (Micro-UX task)
+    // IMPORTANT: The rest of the app's event listeners seem to be missing in this repo state.
+    // I am strictly fixing the modal close button interaction as requested.
+
+    // Modal Close Buttons
+    ui.modal.closes.forEach(btn => {
+        btn.addEventListener('click', closeModal);
+    });
+
+    // Close modal on outside click
+    ui.modal.el.addEventListener('click', (e) => {
+        if (e.target === ui.modal.el || e.target.classList.contains('modal-overlay')) {
+            closeModal();
+        }
+    });
+
+    // Escape key to close modal (Keyboard Accessibility)
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && document.body.classList.contains('modal-active')) {
+            closeModal();
+        }
+    });
+}
+
 function renderStrategyParams(strategy) {
     const container = ui.botSettings.strategyParams;
     container.innerHTML = '';
