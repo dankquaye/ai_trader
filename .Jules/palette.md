@@ -1,0 +1,3 @@
+## 2024-05-23 - Modal Accessibility & Interaction
+**Learning:** Standard CSS transitions on `opacity` combined with `pointer-events: none` are insufficient for accessibility. Screen readers can still navigate to "invisible" elements, and they may still block clicks if child elements have `pointer-events: auto`.
+**Action:** Always toggle `visibility: hidden` or `display: none` (using a helper class like `hidden`) when closing modals. Use `setTimeout` matching the transition duration to apply this class after the fade-out animation completes. Ensure close buttons are semantic `<button>` elements, not `<div>`s, for keyboard focus support.

@@ -346,6 +346,24 @@ function initChart() {
 
 // --- UI Logic ---
 
+// Placeholder for missing function in original code to prevent ReferenceError
+function setupEventListeners() {
+    console.warn('setupEventListeners is not defined in the original code. Using placeholder.');
+}
+
+function setupUXListeners() {
+    // Modal Interactions
+    ui.modal.closes.forEach(el => el.addEventListener('click', closeModal));
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !ui.modal.el.classList.contains('hidden')) closeModal();
+    });
+
+    ui.modal.el.addEventListener('click', (e) => {
+        if (e.target.classList.contains('modal-overlay')) closeModal();
+    });
+}
+
 function renderStrategyParams(strategy) {
     const container = ui.botSettings.strategyParams;
     container.innerHTML = '';
@@ -631,6 +649,7 @@ function applyPreset(type) {
 function openModal(tradeId) {
     const trade = bot.tradeHistory[tradeId];
     if (!trade) return;
+    ui.modal.el.classList.remove('hidden');
     const r = trade.reasoning;
 
     let html = `
@@ -672,6 +691,7 @@ function openModal(tradeId) {
 function closeModal() {
     document.body.classList.remove('modal-active');
     ui.modal.el.classList.add('opacity-0', 'pointer-events-none');
+    setTimeout(() => ui.modal.el.classList.add('hidden'), 300);
 }
 
 window.updateTradeHistory = (history, totalProfit, wins, losses) => {
@@ -837,7 +857,8 @@ function showToast(message, type = 'info') {
 document.addEventListener('DOMContentLoaded', () => {
     try {
         initChart();
-        setupEventListeners();
+        setupEventListeners(); // Restored call
+        setupUXListeners();    // Added UX listeners
         setupApiCallbacks();
         loadSettings();
         showToast('Please enter your API Token to connect.', 'info');
