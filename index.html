@@ -33,7 +33,7 @@
         </div>
         <div class="flex items-center space-x-4">
             <!-- Kill Switch -->
-            <button id="btn-kill-switch" class="bg-red-700 hover:bg-red-600 text-white text-xs font-bold px-3 py-1 rounded shadow animate-pulse hidden" title="EMERGENCY STOP">
+            <button id="btn-kill-switch" class="bg-red-700 hover:bg-red-600 text-white text-xs font-bold px-3 py-1 rounded shadow animate-pulse hidden" title="EMERGENCY STOP" aria-label="Emergency Stop">
                 <i class="fa-solid fa-skull-crossbones mr-1"></i> KILL
             </button>
 
@@ -521,16 +521,16 @@
     </div>
 
     <!-- Trade Reasoning Modal -->
-    <div id="reasoning-modal" class="modal opacity-0 pointer-events-none fixed w-full h-full top-0 left-0 flex items-center justify-center z-50">
+    <div id="reasoning-modal" class="modal opacity-0 pointer-events-none hidden fixed w-full h-full top-0 left-0 flex items-center justify-center z-50">
         <div class="modal-overlay absolute w-full h-full bg-black opacity-75"></div>
         <div class="modal-container bg-gray-800 w-11/12 md:max-w-md mx-auto rounded shadow-lg z-50 overflow-y-auto max-h-[90vh]">
             <div class="modal-content py-4 text-left px-6">
                 <!-- Title -->
                 <div class="flex justify-between items-center pb-3 border-b border-gray-700">
                     <p class="text-2xl font-bold">Trade Analysis</p>
-                    <div class="modal-close cursor-pointer z-50">
+                    <button class="modal-close cursor-pointer z-50 text-gray-400 hover:text-white transition-colors" aria-label="Close modal">
                         <i class="fa-solid fa-xmark text-xl"></i>
-                    </div>
+                    </button>
                 </div>
 
                 <!-- Body -->
