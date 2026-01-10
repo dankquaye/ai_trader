@@ -714,6 +714,162 @@ function aggregateTick(time, price) {
     }
 }
 
+// --- Event Listeners (Restored) ---
+function setupEventListeners() {
+    // --- Navigation ---
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const target = btn.dataset.target;
+            // Update Active State
+            ui.navBtns.forEach(b => b.classList.remove('active', 'text-blue-500'));
+            btn.classList.add('active', 'text-blue-500');
+
+            // Show Page
+            ui.pages.forEach(page => page.classList.add('hidden'));
+            document.getElementById(target).classList.remove('hidden');
+        });
+    });
+
+    // --- Connections ---
+    ui.tokenInput.addEventListener('change', (e) => api.authorize(e.target.value));
+    ui.tokenInput.addEventListener('blur', (e) => {
+        if(e.target.value) api.authorize(e.target.value);
+    });
+
+    ui.assetSelector.addEventListener('change', (e) => {
+        if(bot.isRunning) {
+            showToast('Cannot change asset while bot is running', 'error');
+            e.target.value = bot.currentSymbol;
+            return;
+        }
+        bot.setSymbol(e.target.value);
+        api.subscribeTicks(e.target.value);
+        api.getHistory(e.target.value);
+    });
+
+    // --- Bot Controls ---
+    ui.btns.startBot.addEventListener('click', () => {
+        if (!api.token) return showToast('Please enter API Token first', 'error');
+        bot.start();
+        ui.btns.startBot.classList.add('hidden');
+        ui.btns.stopBot.classList.remove('hidden');
+        ui.btns.pauseBot.classList.remove('hidden');
+        ui.btns.killSwitch.classList.remove('hidden');
+    });
+
+    ui.btns.stopBot.addEventListener('click', () => {
+        bot.stop();
+        ui.btns.startBot.classList.remove('hidden');
+        ui.btns.stopBot.classList.add('hidden');
+        ui.btns.pauseBot.classList.add('hidden');
+        ui.btns.killSwitch.classList.add('hidden');
+    });
+
+    ui.btns.pauseBot.addEventListener('click', () => {
+        const isPaused = bot.togglePause();
+        ui.btns.pauseBot.innerHTML = isPaused ? '<i class="fa-solid fa-play"></i>' : '<i class="fa-solid fa-pause"></i>';
+        ui.btns.pauseBot.classList.toggle('bg-yellow-600');
+        ui.btns.pauseBot.classList.toggle('bg-green-600');
+    });
+
+    ui.btns.killSwitch.addEventListener('click', () => {
+        bot.stop();
+        bot.hasOpenTrade = false; // Force clear
+        ui.btns.startBot.classList.remove('hidden');
+        ui.btns.stopBot.classList.add('hidden');
+        ui.btns.pauseBot.classList.add('hidden');
+        ui.btns.killSwitch.classList.add('hidden');
+        showToast('EMERGENCY STOP ACTIVATED', 'error');
+    });
+
+    // --- Manual Trade ---
+    ui.btns.rise.addEventListener('click', () => bot.watchdogAttemptExecution('rise', ui.assetSelector.value));
+    ui.btns.fall.addEventListener('click', () => bot.watchdogAttemptExecution('fall', ui.assetSelector.value));
+
+    // --- Settings ---
+    ui.inputs.duration.addEventListener('change', (e) => bot.setDuration(parseInt(e.target.value)));
+    ui.inputs.stake.addEventListener('change', (e) => bot.setStake(parseFloat(e.target.value)));
+
+    ui.botSettings.strategy.addEventListener('change', (e) => {
+        renderStrategyParams(e.target.value);
+        bot.updateConfig(e.target.value, ui.botSettings.risk.value);
+        saveSettings();
+    });
+
+    ui.botSettings.risk.addEventListener('change', (e) => {
+        bot.updateConfig(ui.botSettings.strategy.value, e.target.value);
+        saveSettings();
+    });
+
+    // Toggles
+    const toggles = [
+        ['useMartingale', 'setMoneyManagement'],
+        ['useSmartRisk', 'setMoneyManagement'],
+        ['martingaleMultiplier', 'setMoneyManagement'],
+        ['takeProfit', 'setMoneyManagement'],
+        ['stopLoss', 'setMoneyManagement'],
+        ['useFilter', 'setFilter'],
+        ['adxThreshold', 'setFilter'],
+        ['avoidSqueeze', 'setFilter'],
+        ['useAIFilter', 'setAIFilter'],
+        ['lockParams', 'setParamLock'],
+        ['autoSelect', (val) => val ? startAutoScanner() : stopAutoScanner()]
+    ];
+
+    toggles.forEach(([id, action]) => {
+        const el = ui.botSettings[id];
+        if(!el) return;
+        el.addEventListener('change', () => {
+            if (action === 'setMoneyManagement') {
+                bot.setMoneyManagement(
+                    ui.botSettings.useMartingale.checked,
+                    parseFloat(ui.botSettings.martingaleMultiplier.value),
+                    parseFloat(ui.botSettings.takeProfit.value),
+                    parseFloat(ui.botSettings.stopLoss.value),
+                    ui.botSettings.useSmartRisk.checked
+                );
+            } else if (action === 'setFilter') {
+                bot.setFilter(
+                    ui.botSettings.useFilter.checked,
+                    parseInt(ui.botSettings.adxThreshold.value),
+                    ui.botSettings.avoidSqueeze.checked
+                );
+            } else if (action === 'setAIFilter') {
+                bot.setAIFilter(el.checked);
+            } else if (action === 'setParamLock') {
+                bot.setParamLock(el.checked);
+            } else if (typeof action === 'function') {
+                action(el.checked);
+            }
+            saveSettings();
+        });
+    });
+
+    // --- Presets ---
+    document.querySelectorAll('.btn-preset').forEach(btn => {
+        btn.addEventListener('click', () => applyPreset(btn.dataset.preset));
+    });
+
+    ui.btns.loadChallenge.addEventListener('click', () => {
+        bot.setSmallAccountMode(true);
+        applyPreset('conservative'); // Base
+        ui.inputs.stake.value = "0.35"; // Smallest stake
+        showToast('Small Account Challenge Mode Loaded', 'success');
+    });
+
+    // --- Backtest ---
+    ui.backtest.runBtn.addEventListener('click', runBacktest);
+
+    // --- History ---
+    ui.btns.exportHistory.addEventListener('click', exportHistory);
+
+    // --- Modal ---
+    ui.modal.closes.forEach(btn => btn.addEventListener('click', closeModal));
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeModal();
+    });
+}
+
 // --- API Events ---
 
 function setupApiCallbacks() {
