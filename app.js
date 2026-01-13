@@ -388,6 +388,91 @@ function updateBotParams() {
     bot.setStrategyParams(params);
 }
 
+function setupEventListeners() {
+    // Navigation
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const target = btn.dataset.target;
+            ui.navBtns.forEach(b => {
+                b.classList.remove('active');
+                b.setAttribute('aria-selected', 'false');
+            });
+            btn.classList.add('active');
+            btn.setAttribute('aria-selected', 'true');
+            ui.pages.forEach(p => {
+                if(p.id === target) p.classList.remove('hidden');
+                else p.classList.add('hidden');
+            });
+        });
+    });
+
+    // Bot Controls
+    if(ui.btns.startBot) ui.btns.startBot.addEventListener('click', () => bot.start());
+    if(ui.btns.stopBot) ui.btns.stopBot.addEventListener('click', () => bot.stop());
+    if(ui.btns.pauseBot) ui.btns.pauseBot.addEventListener('click', () => bot.togglePause());
+    if(ui.btns.killSwitch) ui.btns.killSwitch.addEventListener('click', () => bot.stop());
+
+    // Manual Trade Buttons
+    if(ui.btns.rise) ui.btns.rise.addEventListener('click', () => {
+        if(bot && api) {
+             const stake = parseFloat(ui.inputs.stake.value);
+             const duration = parseInt(ui.inputs.duration.value);
+             const symbol = ui.assetSelector.value;
+             api.placeTrade('rise', stake, duration, symbol);
+        }
+    });
+    if(ui.btns.fall) ui.btns.fall.addEventListener('click', () => {
+        if(bot && api) {
+             const stake = parseFloat(ui.inputs.stake.value);
+             const duration = parseInt(ui.inputs.duration.value);
+             const symbol = ui.assetSelector.value;
+             api.placeTrade('fall', stake, duration, symbol);
+        }
+    });
+
+    // Backtest
+    if(ui.backtest.runBtn) ui.backtest.runBtn.addEventListener('click', runBacktest);
+
+    // Modal
+    ui.modal.closes.forEach(btn => btn.addEventListener('click', closeModal));
+    ui.modal.el.addEventListener('click', (e) => {
+        if (e.target === ui.modal.el || e.target.classList.contains('modal-overlay')) closeModal();
+    });
+
+    // Settings
+    if(ui.botSettings.strategy) {
+        ui.botSettings.strategy.addEventListener('change', () => {
+             renderStrategyParams(ui.botSettings.strategy.value);
+             saveSettings();
+        });
+    }
+
+    const settingsInputs = [
+        ui.botSettings.risk, ui.botSettings.useFilter, ui.botSettings.adxThreshold,
+        ui.botSettings.avoidSqueeze, ui.botSettings.autoSelect, ui.botSettings.lockParams,
+        ui.botSettings.useMartingale, ui.botSettings.useSmartRisk, ui.botSettings.martingaleMultiplier,
+        ui.botSettings.takeProfit, ui.botSettings.stopLoss, ui.inputs.stake, ui.inputs.duration,
+        ui.assetSelector, ui.botSettings.useAIFilter
+    ];
+
+    settingsInputs.forEach(input => {
+        if(input) input.addEventListener('change', saveSettings);
+    });
+
+    // One Click Setup
+    document.querySelectorAll('.btn-preset').forEach(btn => {
+        btn.addEventListener('click', () => applyPreset(btn.dataset.preset));
+    });
+
+    if(ui.btns.loadChallenge) ui.btns.loadChallenge.addEventListener('click', () => applyPreset('growth'));
+
+    if(ui.btns.exportHistory) ui.btns.exportHistory.addEventListener('click', exportHistory);
+
+    if(ui.btns.sendSupport) ui.btns.sendSupport.addEventListener('click', () => {
+        showToast('Support request sent! We will contact you shortly.', 'success');
+    });
+}
+
 // --- Exposed Helpers ---
 
 window.updateRecoveryStatus = (isActive) => {
@@ -667,11 +752,13 @@ function openModal(tradeId) {
     ui.modal.body.innerHTML = html;
     document.body.classList.add('modal-active');
     ui.modal.el.classList.remove('opacity-0', 'pointer-events-none');
+    ui.modal.el.setAttribute('aria-hidden', 'false');
 }
 
 function closeModal() {
     document.body.classList.remove('modal-active');
     ui.modal.el.classList.add('opacity-0', 'pointer-events-none');
+    ui.modal.el.setAttribute('aria-hidden', 'true');
 }
 
 window.updateTradeHistory = (history, totalProfit, wins, losses) => {

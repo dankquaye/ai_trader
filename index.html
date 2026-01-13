@@ -16,6 +16,8 @@
         .modal {
             transition: opacity 0.25s ease;
         }
+        .opacity-0 { opacity: 0; }
+        .pointer-events-none { pointer-events: none; }
         body.modal-active {
             overflow-x: hidden;
             overflow-y: visible !important;
@@ -54,27 +56,27 @@
     <div class="flex flex-1 flex-col md:flex-row overflow-hidden relative">
         <!-- Sidebar / Bottom Nav -->
         <nav class="order-last md:order-first w-full md:w-20 h-16 md:h-full bg-gray-800 flex flex-row md:flex-col justify-around md:justify-start items-center py-1 md:py-4 md:space-y-8 border-t md:border-t-0 md:border-r border-gray-700 z-10 shrink-0">
-            <button class="nav-btn active" data-target="platform">
+            <button class="nav-btn active" data-target="platform" aria-label="Trade Platform" aria-selected="true">
                 <i class="fa-solid fa-chart-line text-xl mb-1"></i>
                 <span class="text-[10px] md:text-xs">Trade</span>
             </button>
-            <button class="nav-btn" data-target="ai-robot">
+            <button class="nav-btn" data-target="ai-robot" aria-label="AI Auto Trading" aria-selected="false">
                 <i class="fa-solid fa-brain text-xl mb-1"></i>
                 <span class="text-[10px] md:text-xs">Auto</span>
             </button>
-            <button class="nav-btn" data-target="backtest">
+            <button class="nav-btn" data-target="backtest" aria-label="Backtester" aria-selected="false">
                 <i class="fa-solid fa-flask text-xl mb-1"></i>
                 <span class="text-[10px] md:text-xs">Test</span>
             </button>
-            <button class="nav-btn" data-target="history">
+            <button class="nav-btn" data-target="history" aria-label="Trade History" aria-selected="false">
                 <i class="fa-solid fa-clock-rotate-left text-xl mb-1"></i>
                 <span class="text-[10px] md:text-xs">History</span>
             </button>
-            <button class="nav-btn" data-target="profile">
+            <button class="nav-btn" data-target="profile" aria-label="User Profile" aria-selected="false">
                 <i class="fa-solid fa-user text-xl mb-1"></i>
                 <span class="text-[10px] md:text-xs">Profile</span>
             </button>
-            <button class="nav-btn" data-target="support">
+            <button class="nav-btn" data-target="support" aria-label="Support & Help" aria-selected="false">
                 <i class="fa-solid fa-headset text-xl mb-1"></i>
                 <span class="text-[10px] md:text-xs">Help</span>
             </button>
@@ -521,16 +523,16 @@
     </div>
 
     <!-- Trade Reasoning Modal -->
-    <div id="reasoning-modal" class="modal opacity-0 pointer-events-none fixed w-full h-full top-0 left-0 flex items-center justify-center z-50">
+    <div id="reasoning-modal" class="modal opacity-0 pointer-events-none fixed w-full h-full top-0 left-0 flex items-center justify-center z-50" aria-hidden="true">
         <div class="modal-overlay absolute w-full h-full bg-black opacity-75"></div>
         <div class="modal-container bg-gray-800 w-11/12 md:max-w-md mx-auto rounded shadow-lg z-50 overflow-y-auto max-h-[90vh]">
             <div class="modal-content py-4 text-left px-6">
                 <!-- Title -->
                 <div class="flex justify-between items-center pb-3 border-b border-gray-700">
                     <p class="text-2xl font-bold">Trade Analysis</p>
-                    <div class="modal-close cursor-pointer z-50">
+                    <button class="modal-close cursor-pointer z-50 text-gray-400 hover:text-white transition-colors" aria-label="Close modal">
                         <i class="fa-solid fa-xmark text-xl"></i>
-                    </div>
+                    </button>
                 </div>
 
                 <!-- Body -->
