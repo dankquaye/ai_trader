@@ -716,6 +716,156 @@ function aggregateTick(time, price) {
 
 // --- API Events ---
 
+function setupEventListeners() {
+    // Navigation
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const targetId = btn.dataset.target;
+            ui.pages.forEach(p => p.classList.add('hidden'));
+            document.getElementById(targetId).classList.remove('hidden');
+            ui.navBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            if (targetId === 'backtest') {
+                initBacktestChart();
+            }
+        });
+    });
+
+    // Account & Token
+    ui.tokenInput.addEventListener('change', () => {
+        const token = ui.tokenInput.value.trim();
+        if (token) api.authorize(token);
+    });
+
+    ui.accountSelector.addEventListener('change', () => {
+        // Placeholder for account switching logic
+        console.log('Account type changed:', ui.accountSelector.value);
+    });
+
+    // Trading Controls
+    if(ui.btns.rise) ui.btns.rise.addEventListener('click', () => bot.placeTrade('CALL'));
+    if(ui.btns.fall) ui.btns.fall.addEventListener('click', () => bot.placeTrade('PUT'));
+
+    // Bot Controls
+    ui.btns.startBot.addEventListener('click', () => {
+        bot.start();
+        ui.btns.startBot.classList.add('hidden');
+        ui.btns.stopBot.classList.remove('hidden');
+        ui.btns.pauseBot.classList.remove('hidden');
+        ui.btns.killSwitch.classList.remove('hidden');
+    });
+
+    ui.btns.stopBot.addEventListener('click', () => {
+        bot.stop();
+        ui.btns.startBot.classList.remove('hidden');
+        ui.btns.stopBot.classList.add('hidden');
+        ui.btns.pauseBot.classList.add('hidden');
+        ui.btns.killSwitch.classList.add('hidden');
+    });
+
+    ui.btns.pauseBot.addEventListener('click', () => {
+        bot.stop();
+        showToast('Bot Paused', 'info');
+        ui.btns.startBot.classList.remove('hidden');
+        ui.btns.stopBot.classList.add('hidden');
+        ui.btns.pauseBot.classList.add('hidden');
+        ui.btns.killSwitch.classList.add('hidden');
+    });
+
+    ui.btns.killSwitch.addEventListener('click', () => {
+        bot.stop();
+        showToast('EMERGENCY STOP ACTIVATED', 'error');
+        ui.btns.startBot.classList.remove('hidden');
+        ui.btns.stopBot.classList.add('hidden');
+        ui.btns.pauseBot.classList.add('hidden');
+        ui.btns.killSwitch.classList.add('hidden');
+    });
+
+    // Presets
+    document.querySelectorAll('.btn-preset').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const preset = btn.dataset.preset;
+            applyPreset(preset);
+        });
+    });
+
+    if(ui.btns.loadChallenge) {
+        ui.btns.loadChallenge.addEventListener('click', () => applyPreset('conservative'));
+    }
+
+    // Modal
+    ui.modal.closes.forEach(btn => {
+        btn.addEventListener('click', closeModal);
+    });
+
+    ui.modal.el.addEventListener('click', (e) => {
+        if (e.target === ui.modal.el || e.target.classList.contains('modal-overlay')) {
+            closeModal();
+        }
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && document.body.classList.contains('modal-active')) {
+            closeModal();
+        }
+    });
+
+    // Settings
+    const settingsInputs = [
+        ui.botSettings.strategy,
+        ui.botSettings.risk,
+        ui.botSettings.useMartingale,
+        ui.botSettings.useSmartRisk,
+        ui.botSettings.martingaleMultiplier,
+        ui.botSettings.takeProfit,
+        ui.botSettings.stopLoss,
+        ui.botSettings.useFilter,
+        ui.botSettings.adxThreshold,
+        ui.botSettings.avoidSqueeze,
+        ui.botSettings.autoSelect,
+        ui.botSettings.useAIFilter,
+        ui.botSettings.lockParams,
+        ui.inputs.stake,
+        ui.inputs.duration,
+        ui.assetSelector
+    ];
+
+    settingsInputs.forEach(input => {
+        if(input) {
+            input.addEventListener('change', () => {
+                if (input === ui.botSettings.strategy) {
+                    renderStrategyParams(input.value);
+                }
+                if (input === ui.botSettings.autoSelect) {
+                    if (input.checked) startAutoScanner();
+                    else stopAutoScanner();
+                }
+                saveSettings();
+            });
+        }
+    });
+
+    // Backtest
+    if(ui.backtest.runBtn) {
+        ui.backtest.runBtn.addEventListener('click', runBacktest);
+    }
+
+    // Export
+    if(ui.btns.exportHistory) {
+        ui.btns.exportHistory.addEventListener('click', exportHistory);
+    }
+
+    // Support
+    if(ui.btns.sendSupport) {
+        ui.btns.sendSupport.addEventListener('click', () => {
+             showToast('Message sent to support!', 'success');
+             const form = ui.btns.sendSupport.closest('form');
+             if(form) form.reset();
+        });
+    }
+}
+
 function setupApiCallbacks() {
     api.on('authorize', (data) => {
         ui.profile.loginid.innerText = `ID: ${data.loginid}`;
