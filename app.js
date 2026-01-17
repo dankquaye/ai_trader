@@ -846,3 +846,173 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast('Initialization Error: ' + e.message, 'error');
     }
 });
+
+function setupEventListeners() {
+    // Navigation
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const target = btn.dataset.target;
+
+            // Update active state
+            ui.navBtns.forEach(b => b.classList.remove('active', 'text-blue-400'));
+            btn.classList.add('active', 'text-blue-400');
+
+            // Show target section
+            ui.pages.forEach(page => {
+                if(page.id === target) {
+                    page.classList.remove('hidden');
+                    // Special layout for platform
+                    if(target === 'platform') page.classList.add('flex');
+                    else page.classList.remove('flex');
+                } else {
+                    page.classList.add('hidden');
+                    page.classList.remove('flex');
+                }
+            });
+
+            // Resize chart if showing platform
+            if(target === 'platform' && window.chart) {
+                window.chart.resize(ui.chartContainer.clientWidth, ui.chartContainer.clientHeight);
+            }
+        });
+    });
+
+    // Asset Selection
+    ui.assetSelector.addEventListener('change', () => {
+        const symbol = ui.assetSelector.value;
+        if(bot) bot.setSymbol(symbol);
+        if(api) {
+            api.forgetAll('ticks');
+            api.subscribeTicks(symbol);
+            api.subscribeCandles(symbol, 60);
+            api.getHistory(symbol);
+        }
+        showToast(`Switched to ${symbol}`);
+    });
+
+    // Bot Controls
+    ui.btns.startBot.addEventListener('click', async () => {
+        if(!bot) return;
+        ui.btns.startBot.classList.add('hidden');
+        ui.btns.stopBot.classList.remove('hidden');
+        ui.btns.pauseBot.classList.remove('hidden');
+
+        await bot.start();
+        playSound('win'); // Startup sound
+        showToast('Bot Started', 'success');
+    });
+
+    ui.btns.stopBot.addEventListener('click', () => {
+        if(!bot) return;
+        bot.stop();
+        ui.btns.stopBot.classList.add('hidden');
+        ui.btns.pauseBot.classList.add('hidden');
+        ui.btns.startBot.classList.remove('hidden');
+        showToast('Bot Stopped', 'error');
+    });
+
+    ui.btns.pauseBot.addEventListener('click', () => {
+        if(!bot) return;
+        const isPaused = bot.togglePause();
+        ui.btns.pauseBot.innerHTML = isPaused ? '<i class="fa-solid fa-play"></i>' : '<i class="fa-solid fa-pause"></i>';
+        ui.btns.pauseBot.setAttribute('aria-label', isPaused ? 'Resume Bot' : 'Pause Bot');
+        ui.btns.pauseBot.classList.toggle('bg-yellow-600');
+        ui.btns.pauseBot.classList.toggle('bg-green-600');
+    });
+
+    ui.btns.killSwitch.addEventListener('click', () => {
+        if(bot) bot.stop();
+        window.location.reload();
+    });
+
+    // Manual Trade Controls
+    ui.btns.rise.addEventListener('click', () => {
+        if(api) api.placeTrade('rise', ui.inputs.stake.value, ui.inputs.duration.value, ui.assetSelector.value);
+    });
+
+    ui.btns.fall.addEventListener('click', () => {
+        if(api) api.placeTrade('fall', ui.inputs.stake.value, ui.inputs.duration.value, ui.assetSelector.value);
+    });
+
+    // Settings Inputs
+    Object.values(ui.botSettings).forEach(input => {
+        if(input && input.tagName !== 'DIV') { // skip strategyParams container
+            input.addEventListener('change', () => {
+                saveSettings();
+                // Apply changes to bot immediately
+                if(bot) {
+                    bot.setStrategyParams({
+                        [input.id]: input.value // Simplified mapping
+                    });
+                    // Re-read specific flags
+                    bot.setMoneyManagement(
+                        ui.botSettings.useMartingale.checked,
+                        parseFloat(ui.botSettings.martingaleMultiplier.value),
+                        parseFloat(ui.botSettings.takeProfit.value),
+                        parseFloat(ui.botSettings.stopLoss.value),
+                        ui.botSettings.useSmartRisk.checked
+                    );
+                    bot.setFilter(
+                        ui.botSettings.useFilter.checked,
+                        parseInt(ui.botSettings.adxThreshold.value),
+                        ui.botSettings.avoidSqueeze.checked
+                    );
+                    bot.setAIFilter(ui.botSettings.useAIFilter.checked);
+                    bot.setDynamicDuration(document.getElementById('use-dynamic-duration').checked);
+                }
+            });
+        }
+    });
+
+    // Strategy Change
+    ui.botSettings.strategy.addEventListener('change', () => {
+        const strat = ui.botSettings.strategy.value;
+        if(bot) bot.updateConfig(strat, ui.botSettings.risk.value);
+        renderStrategyParams(strat);
+        saveSettings();
+    });
+
+    // Account Selector
+    ui.accountSelector.addEventListener('change', () => {
+        const type = ui.accountSelector.value;
+        if(bot) bot.setAccountType(type);
+        showToast(`Switched to ${type.toUpperCase()} Account`);
+    });
+
+    // API Token
+    ui.tokenInput.addEventListener('change', () => {
+        const token = ui.tokenInput.value;
+        if(token && api) api.authorize(token);
+    });
+
+    // Presets
+    document.querySelectorAll('.btn-preset').forEach(btn => {
+        btn.addEventListener('click', () => {
+            applyPreset(btn.dataset.preset);
+        });
+    });
+
+    // Backtest
+    if(ui.backtest.runBtn) {
+        ui.backtest.runBtn.addEventListener('click', runBacktest);
+    }
+
+    // Modal Closing
+    ui.modal.closes.forEach(btn => {
+        btn.addEventListener('click', closeModal);
+    });
+
+    // Close modal on background click
+    ui.modal.el.addEventListener('click', (e) => {
+        if(e.target === ui.modal.el || e.target.classList.contains('modal-overlay')) {
+            closeModal();
+        }
+    });
+
+    // Support
+    if(ui.btns.sendSupport) {
+        ui.btns.sendSupport.addEventListener('click', () => {
+            showToast('Message sent! Support will contact you shortly.', 'success');
+        });
+    }
+}
