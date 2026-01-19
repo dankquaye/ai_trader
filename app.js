@@ -714,6 +714,41 @@ function aggregateTick(time, price) {
     }
 }
 
+function setupEventListeners() {
+    // Navigation
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            ui.navBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            ui.pages.forEach(p => p.classList.add('hidden'));
+            document.getElementById(btn.dataset.target).classList.remove('hidden');
+        });
+    });
+
+    // Modal - Critical for UX
+    ui.modal.closes.forEach(btn => btn.addEventListener('click', closeModal));
+    ui.modal.el.addEventListener('click', (e) => {
+        if (e.target.classList.contains('modal-overlay')) closeModal();
+    });
+
+    // Pause Bot - Update ARIA label
+    if (ui.btns.pauseBot) ui.btns.pauseBot.addEventListener('click', () => {
+        const isPaused = bot.togglePause();
+        const icon = ui.btns.pauseBot.querySelector('i');
+        if (isPaused) {
+            icon.classList.remove('fa-pause');
+            icon.classList.add('fa-play');
+            ui.btns.pauseBot.setAttribute('aria-label', 'Resume Bot');
+        } else {
+            icon.classList.remove('fa-play');
+            icon.classList.add('fa-pause');
+            ui.btns.pauseBot.setAttribute('aria-label', 'Pause Bot');
+        }
+    });
+
+    console.warn("Minimal event listeners loaded for UX verification.");
+}
+
 // --- API Events ---
 
 function setupApiCallbacks() {
