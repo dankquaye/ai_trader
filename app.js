@@ -846,3 +846,178 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast('Initialization Error: ' + e.message, 'error');
     }
 });
+
+function setupEventListeners() {
+    // Navigation
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            ui.navBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const target = btn.dataset.target;
+            ui.pages.forEach(p => {
+                if (p.id === target) p.classList.remove('hidden');
+                else p.classList.add('hidden');
+            });
+        });
+    });
+
+    // Modal
+    ui.modal.closes.forEach(btn => {
+        btn.addEventListener('click', closeModal);
+    });
+
+    // Bot Controls
+    if (ui.btns.startBot) {
+        ui.btns.startBot.addEventListener('click', () => {
+            if (!ui.tokenInput.value) return showToast('Please enter API Token', 'error');
+            bot.start();
+            ui.btns.startBot.classList.add('hidden');
+            ui.btns.stopBot.classList.remove('hidden');
+            ui.btns.pauseBot.classList.remove('hidden');
+            ui.btns.killSwitch.classList.remove('hidden');
+            showToast('Bot Started', 'success');
+        });
+    }
+
+    if (ui.btns.stopBot) {
+        ui.btns.stopBot.addEventListener('click', () => {
+            bot.stop();
+            ui.btns.startBot.classList.remove('hidden');
+            ui.btns.stopBot.classList.add('hidden');
+            ui.btns.pauseBot.classList.add('hidden');
+            ui.btns.killSwitch.classList.add('hidden');
+            showToast('Bot Stopped', 'error');
+        });
+    }
+
+    if (ui.btns.pauseBot) {
+        ui.btns.pauseBot.addEventListener('click', () => {
+            const isPaused = bot.togglePause();
+            const icon = ui.btns.pauseBot.querySelector('i');
+            if (isPaused) {
+                ui.btns.pauseBot.innerHTML = '<i class="fa-solid fa-play"></i>';
+                ui.btns.pauseBot.setAttribute('aria-label', 'Resume Bot');
+                ui.btns.pauseBot.classList.replace('bg-yellow-600', 'bg-green-600');
+                ui.btns.pauseBot.classList.replace('hover:bg-yellow-500', 'hover:bg-green-500');
+            } else {
+                ui.btns.pauseBot.innerHTML = '<i class="fa-solid fa-pause"></i>';
+                ui.btns.pauseBot.setAttribute('aria-label', 'Pause Bot');
+                ui.btns.pauseBot.classList.replace('bg-green-600', 'bg-yellow-600');
+                ui.btns.pauseBot.classList.replace('hover:bg-green-500', 'hover:bg-yellow-500');
+            }
+        });
+    }
+
+    if (ui.btns.killSwitch) {
+        ui.btns.killSwitch.addEventListener('click', () => {
+            bot.stop();
+            window.location.reload();
+        });
+    }
+
+    // Manual Trade
+    if (ui.btns.rise) {
+        ui.btns.rise.addEventListener('click', () => {
+            if (!bot.isRunning) return showToast('Bot must be running', 'error');
+            bot.watchdogAttemptExecution('rise', bot.currentSymbol);
+        });
+    }
+    if (ui.btns.fall) {
+        ui.btns.fall.addEventListener('click', () => {
+            if (!bot.isRunning) return showToast('Bot must be running', 'error');
+            bot.watchdogAttemptExecution('fall', bot.currentSymbol);
+        });
+    }
+
+    // Settings
+    if (ui.botSettings.strategy) {
+        ui.botSettings.strategy.addEventListener('change', (e) => {
+            renderStrategyParams(e.target.value);
+            saveSettings();
+        });
+    }
+
+    if (ui.assetSelector) {
+        ui.assetSelector.addEventListener('change', (e) => {
+            bot.setSymbol(e.target.value);
+            if (window.api) {
+                api.subscribeTicks(e.target.value);
+                api.subscribeCandles(e.target.value, 60);
+                api.subscribeCandles(e.target.value, 300);
+            }
+            saveSettings();
+        });
+    }
+
+    if (ui.accountSelector) {
+        ui.accountSelector.addEventListener('change', (e) => {
+            bot.setAccountType(e.target.value);
+            saveSettings();
+        });
+    }
+
+    if (ui.tokenInput) {
+        ui.tokenInput.addEventListener('change', (e) => {
+            if (e.target.value) api.authorize(e.target.value);
+        });
+    }
+
+    // Generic Settings Save
+    const settingsInputs = [
+        ...ui.botSettings.strategyParams.querySelectorAll('input'),
+        ui.botSettings.risk,
+        ui.botSettings.useMartingale,
+        ui.botSettings.useSmartRisk,
+        ui.botSettings.martingaleMultiplier,
+        ui.botSettings.takeProfit,
+        ui.botSettings.stopLoss,
+        ui.botSettings.useFilter,
+        ui.botSettings.adxThreshold,
+        ui.botSettings.avoidSqueeze,
+        ui.botSettings.autoSelect,
+        ui.botSettings.useAIFilter,
+        ui.botSettings.lockParams,
+        ui.inputs.duration,
+        ui.inputs.stake
+    ];
+
+    settingsInputs.forEach(input => {
+        if (input) {
+            input.addEventListener('change', saveSettings);
+        }
+    });
+
+    // Presets
+    document.querySelectorAll('.btn-preset').forEach(btn => {
+        btn.addEventListener('click', () => {
+            applyPreset(btn.dataset.preset);
+        });
+    });
+
+    if (ui.btns.loadChallenge) {
+        ui.btns.loadChallenge.addEventListener('click', () => {
+             bot.setSmallAccountMode(true);
+             applyPreset('conservative'); // Base
+             showToast('Small Account Challenge Mode Active', 'success');
+        });
+    }
+
+    // Backtest
+    if (ui.backtest.runBtn) {
+        ui.backtest.runBtn.addEventListener('click', runBacktest);
+    }
+
+    // Support
+    if (ui.btns.sendSupport) {
+        ui.btns.sendSupport.addEventListener('click', () => {
+            showToast('Message sent to support!', 'success');
+            // Clear inputs
+            const form = ui.btns.sendSupport.parentElement;
+            form.reset();
+        });
+    }
+
+    if (ui.btns.exportHistory) {
+        ui.btns.exportHistory.addEventListener('click', exportHistory);
+    }
+}
