@@ -834,6 +834,123 @@ function showToast(message, type = 'info') {
     }, 3000);
 }
 
+function setupEventListeners() {
+    // Navigation
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const target = btn.dataset.target;
+            ui.pages.forEach(p => p.classList.add('hidden'));
+            document.getElementById(target).classList.remove('hidden');
+            ui.navBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            // Trigger resize for charts if needed
+            if(target === 'platform' && chart) chart.resize(ui.chartContainer.clientWidth, ui.chartContainer.clientHeight);
+            if(target === 'backtest' && btChart) btChart.resize(ui.backtest.chartContainer.clientWidth, ui.backtest.chartContainer.clientHeight);
+        });
+    });
+
+    // Modal
+    ui.modal.closes.forEach(btn => btn.addEventListener('click', closeModal));
+    ui.modal.el.addEventListener('click', (e) => {
+        if (e.target === ui.modal.el || e.target.classList.contains('modal-overlay')) closeModal();
+    });
+
+    // Bot Controls
+    ui.btns.startBot.addEventListener('click', () => {
+        if (bot.isRunning) return;
+        bot.start();
+        ui.btns.startBot.classList.add('hidden');
+        ui.btns.stopBot.classList.remove('hidden');
+        ui.btns.pauseBot.classList.remove('hidden');
+    });
+
+    ui.btns.stopBot.addEventListener('click', () => {
+        bot.stop();
+        ui.btns.stopBot.classList.add('hidden');
+        ui.btns.pauseBot.classList.add('hidden');
+        ui.btns.startBot.classList.remove('hidden');
+        ui.btns.pauseBot.innerHTML = '<i class="fa-solid fa-pause"></i>'; // Reset pause icon
+    });
+
+    ui.btns.pauseBot.addEventListener('click', () => {
+        if (!bot.isRunning) return;
+        const isPaused = bot.togglePause();
+        if (isPaused) {
+            ui.btns.pauseBot.innerHTML = '<i class="fa-solid fa-play"></i>';
+            ui.btns.pauseBot.setAttribute('aria-label', 'Resume Bot');
+        } else {
+            ui.btns.pauseBot.innerHTML = '<i class="fa-solid fa-pause"></i>';
+            ui.btns.pauseBot.setAttribute('aria-label', 'Pause Bot');
+        }
+    });
+
+    ui.btns.killSwitch.addEventListener('click', () => {
+        bot.stop();
+        location.reload();
+    });
+
+    // Trading
+    ui.btns.rise.addEventListener('click', () => {
+        if(!bot || !bot.currentSymbol) return;
+        const stake = parseFloat(ui.inputs.stake.value);
+        const duration = parseInt(ui.inputs.duration.value);
+        api.placeTrade('rise', stake, duration, bot.currentSymbol);
+    });
+    ui.btns.fall.addEventListener('click', () => {
+        if(!bot || !bot.currentSymbol) return;
+        const stake = parseFloat(ui.inputs.stake.value);
+        const duration = parseInt(ui.inputs.duration.value);
+        api.placeTrade('fall', stake, duration, bot.currentSymbol);
+    });
+
+    // Inputs
+    ui.tokenInput.addEventListener('change', (e) => {
+        if(e.target.value) api.authorize(e.target.value);
+    });
+
+    // Settings
+    ui.accountSelector.addEventListener('change', () => {
+         showToast('Account switching not fully implemented in demo', 'info');
+    });
+
+    ui.botSettings.strategy.addEventListener('change', () => {
+        renderStrategyParams(ui.botSettings.strategy.value);
+        saveSettings();
+    });
+
+    const settingsInputs = [
+        ui.botSettings.risk, ui.botSettings.useFilter, ui.botSettings.adxThreshold,
+        ui.botSettings.avoidSqueeze, ui.botSettings.autoSelect, ui.botSettings.lockParams,
+        ui.botSettings.useMartingale, ui.botSettings.useSmartRisk, ui.botSettings.martingaleMultiplier,
+        ui.botSettings.takeProfit, ui.botSettings.stopLoss, ui.inputs.stake, ui.inputs.duration
+    ];
+    settingsInputs.forEach(el => {
+        if(el) el.addEventListener('change', saveSettings);
+    });
+
+    // Presets
+    document.querySelectorAll('.btn-preset').forEach(btn => {
+        btn.addEventListener('click', () => applyPreset(btn.dataset.preset));
+    });
+
+    // Backtest
+    if(ui.backtest.runBtn) ui.backtest.runBtn.addEventListener('click', runBacktest);
+
+    // Export & Support
+    if(ui.btns.exportHistory) ui.btns.exportHistory.addEventListener('click', exportHistory);
+    if(ui.btns.sendSupport) ui.btns.sendSupport.addEventListener('click', () => showToast('Message sent! Support will contact you shortly.', 'success'));
+
+    // Asset Selector
+    ui.assetSelector.addEventListener('change', () => {
+        const symbol = ui.assetSelector.value;
+        if(bot) bot.setSymbol(symbol);
+        api.subscribeTicks(symbol);
+        api.getHistory(symbol);
+        saveSettings();
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     try {
         initChart();
