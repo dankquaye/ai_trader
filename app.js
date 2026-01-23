@@ -714,6 +714,135 @@ function aggregateTick(time, price) {
     }
 }
 
+// --- Event Listeners ---
+
+function setupEventListeners() {
+    // Navigation
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            ui.navBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const target = btn.dataset.target;
+            ui.pages.forEach(p => {
+                p.classList.add('hidden');
+                if(p.id === target) p.classList.remove('hidden');
+            });
+        });
+    });
+
+    // Bot Controls
+    ui.btns.startBot.addEventListener('click', () => {
+        if(!bot.isRunning) {
+            bot.start();
+            ui.btns.startBot.classList.add('hidden');
+            ui.btns.stopBot.classList.remove('hidden');
+            ui.btns.pauseBot.classList.remove('hidden');
+            ui.btns.killSwitch.classList.remove('hidden');
+            showToast('Bot Started', 'success');
+        }
+    });
+
+    ui.btns.stopBot.addEventListener('click', () => {
+        bot.stop();
+        ui.btns.startBot.classList.remove('hidden');
+        ui.btns.stopBot.classList.add('hidden');
+        ui.btns.pauseBot.classList.add('hidden');
+        ui.btns.killSwitch.classList.add('hidden');
+        showToast('Bot Stopped', 'info');
+    });
+
+    ui.btns.killSwitch.addEventListener('click', () => {
+        bot.stop();
+        ui.btns.startBot.classList.remove('hidden');
+        ui.btns.stopBot.classList.add('hidden');
+        ui.btns.pauseBot.classList.add('hidden');
+        ui.btns.killSwitch.classList.add('hidden');
+        showToast('EMERGENCY STOP ACTIVATED', 'error');
+    });
+
+    ui.btns.pauseBot.addEventListener('click', () => {
+        if (!bot.isRunning) return;
+        const isPaused = bot.togglePause();
+
+        // UX: Update Icon and Label (Palette's Enhancement)
+        if (isPaused) {
+            ui.btns.pauseBot.innerHTML = '<i class="fa-solid fa-play"></i>';
+            ui.btns.pauseBot.setAttribute('aria-label', 'Resume Bot');
+            ui.btns.pauseBot.classList.remove('bg-yellow-600', 'hover:bg-yellow-500');
+            ui.btns.pauseBot.classList.add('bg-green-600', 'hover:bg-green-500');
+        } else {
+            ui.btns.pauseBot.innerHTML = '<i class="fa-solid fa-pause"></i>';
+            ui.btns.pauseBot.setAttribute('aria-label', 'Pause Bot');
+            ui.btns.pauseBot.classList.remove('bg-green-600', 'hover:bg-green-500');
+            ui.btns.pauseBot.classList.add('bg-yellow-600', 'hover:bg-yellow-500');
+        }
+    });
+
+    // Manual Trade
+    ui.btns.rise.addEventListener('click', () => {
+        const stake = parseFloat(ui.inputs.stake.value);
+        const duration = parseInt(ui.inputs.duration.value);
+        if(bot.isRunning) showToast('Warning: Manual trade while bot is running', 'info');
+        api.placeTrade('rise', stake, duration, ui.assetSelector.value);
+    });
+
+    ui.btns.fall.addEventListener('click', () => {
+        const stake = parseFloat(ui.inputs.stake.value);
+        const duration = parseInt(ui.inputs.duration.value);
+        if(bot.isRunning) showToast('Warning: Manual trade while bot is running', 'info');
+        api.placeTrade('fall', stake, duration, ui.assetSelector.value);
+    });
+
+    // Modals
+    ui.modal.closes.forEach(btn => {
+        btn.addEventListener('click', closeModal);
+    });
+
+    // Settings & Presets
+    document.querySelectorAll('.btn-preset').forEach(btn => {
+        btn.addEventListener('click', () => applyPreset(btn.dataset.preset));
+    });
+
+    if(ui.btns.loadChallenge) {
+        ui.btns.loadChallenge.addEventListener('click', () => {
+             bot.setSmallAccountMode(true);
+             showToast('Small Account Challenge Loaded', 'success');
+        });
+    }
+
+    if(ui.backtest.runBtn) {
+        ui.backtest.runBtn.addEventListener('click', runBacktest);
+    }
+
+    // Inputs
+    if(ui.botSettings.strategy) {
+        ui.botSettings.strategy.addEventListener('change', () => {
+            renderStrategyParams(ui.botSettings.strategy.value);
+            saveSettings();
+        });
+    }
+
+    // Token Input Auto-Save
+    ui.tokenInput.addEventListener('change', () => {
+        api.setToken(ui.tokenInput.value);
+        api.connect();
+    });
+
+    ui.accountSelector.addEventListener('change', () => {
+        api.setAccountType(ui.accountSelector.value);
+    });
+
+    ui.assetSelector.addEventListener('change', () => {
+        bot.setSymbol(ui.assetSelector.value);
+        api.unsubscribeAll();
+        api.subscribeTicks(ui.assetSelector.value);
+        api.subscribeCandles(ui.assetSelector.value, 60);
+        api.subscribeCandles(ui.assetSelector.value, 300);
+        api.getHistory(ui.assetSelector.value);
+        saveSettings();
+    });
+}
+
 // --- API Events ---
 
 function setupApiCallbacks() {
