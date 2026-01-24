@@ -834,6 +834,149 @@ function showToast(message, type = 'info') {
     }, 3000);
 }
 
+function setupEventListeners() {
+    // Navigation
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const targetId = btn.dataset.target;
+            ui.navBtns.forEach(b => {
+                b.classList.remove('active', 'text-blue-400');
+                if(b.querySelector('span')) b.querySelector('span').classList.remove('font-bold');
+            });
+            btn.classList.add('active', 'text-blue-400');
+            if(btn.querySelector('span')) btn.querySelector('span').classList.add('font-bold');
+
+            ui.pages.forEach(page => page.classList.add('hidden'));
+            const target = document.getElementById(targetId);
+            if(target) target.classList.remove('hidden');
+        });
+    });
+
+    // Modal Close
+    ui.modal.closes.forEach(btn => {
+        btn.addEventListener('click', closeModal);
+    });
+
+    ui.modal.el.addEventListener('click', (e) => {
+        if (e.target === ui.modal.el || e.target.classList.contains('modal-overlay')) {
+            closeModal();
+        }
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && document.body.classList.contains('modal-active')) {
+            closeModal();
+        }
+    });
+
+    // Bot Controls
+    ui.btns.startBot.addEventListener('click', () => {
+        if (!ui.tokenInput.value) return showToast('Please enter API Token', 'error');
+        bot.start(ui.tokenInput.value, ui.inputs.stake.value, parseInt(ui.inputs.duration.value));
+        ui.btns.startBot.classList.add('hidden');
+        ui.btns.stopBot.classList.remove('hidden');
+        ui.btns.pauseBot.classList.remove('hidden');
+        ui.btns.killSwitch.classList.remove('hidden');
+    });
+
+    ui.btns.stopBot.addEventListener('click', () => {
+        bot.stop();
+        ui.btns.stopBot.classList.add('hidden');
+        ui.btns.pauseBot.classList.add('hidden');
+        ui.btns.killSwitch.classList.add('hidden');
+        ui.btns.startBot.classList.remove('hidden');
+    });
+
+    ui.btns.killSwitch.addEventListener('click', () => {
+        bot.stop();
+        showToast('EMERGENCY KILL ACTIVATED', 'error');
+        setTimeout(() => window.location.reload(), 1000);
+    });
+
+    ui.btns.pauseBot.addEventListener('click', () => {
+        if (bot.isPaused) {
+            bot.resume();
+            ui.btns.pauseBot.innerHTML = '<i class="fa-solid fa-pause"></i>';
+            ui.btns.pauseBot.setAttribute('aria-label', 'Pause Bot');
+            ui.btns.pauseBot.classList.remove('bg-green-600');
+            ui.btns.pauseBot.classList.add('bg-yellow-600');
+        } else {
+            bot.pause();
+            ui.btns.pauseBot.innerHTML = '<i class="fa-solid fa-play"></i>';
+            ui.btns.pauseBot.setAttribute('aria-label', 'Resume Bot');
+            ui.btns.pauseBot.classList.remove('bg-yellow-600');
+            ui.btns.pauseBot.classList.add('bg-green-600');
+        }
+    });
+
+    // Manual Trade
+    ui.btns.rise.addEventListener('click', () => {
+        if (!bot.isRunning && !ui.tokenInput.value) return showToast('Enter API Token first', 'error');
+        api.placeTrade('rise', parseFloat(ui.inputs.stake.value), parseInt(ui.inputs.duration.value), ui.assetSelector.value);
+    });
+
+    ui.btns.fall.addEventListener('click', () => {
+        if (!bot.isRunning && !ui.tokenInput.value) return showToast('Enter API Token first', 'error');
+        api.placeTrade('fall', parseFloat(ui.inputs.stake.value), parseInt(ui.inputs.duration.value), ui.assetSelector.value);
+    });
+
+    // Settings
+    if(ui.botSettings.strategy) {
+        ui.botSettings.strategy.addEventListener('change', () => {
+            renderStrategyParams(ui.botSettings.strategy.value);
+            saveSettings();
+        });
+    }
+
+    if(ui.botSettings.risk) ui.botSettings.risk.addEventListener('change', saveSettings);
+    if(ui.botSettings.autoSelect) {
+        ui.botSettings.autoSelect.addEventListener('change', () => {
+            if(ui.botSettings.autoSelect.checked) startAutoScanner();
+            else stopAutoScanner();
+            saveSettings();
+        });
+    }
+
+    // Inputs
+    if(ui.inputs.stake) ui.inputs.stake.addEventListener('change', saveSettings);
+    if(ui.inputs.duration) ui.inputs.duration.addEventListener('change', saveSettings);
+
+    if(ui.assetSelector) {
+        ui.assetSelector.addEventListener('change', () => {
+            api.subscribeTicks(ui.assetSelector.value);
+            saveSettings();
+            if(candleSeries) candleSeries.setData([]);
+            api.getHistory(ui.assetSelector.value);
+        });
+    }
+
+    // Other Buttons
+    if(ui.backtest.runBtn) ui.backtest.runBtn.addEventListener('click', runBacktest);
+    if(ui.btns.exportHistory) ui.btns.exportHistory.addEventListener('click', exportHistory);
+    if(ui.btns.sendSupport) ui.btns.sendSupport.addEventListener('click', () => showToast('Message sent!', 'success'));
+
+    document.querySelectorAll('.btn-preset').forEach(btn => {
+        btn.addEventListener('click', () => applyPreset(btn.dataset.preset));
+    });
+
+    if(ui.btns.loadChallenge) {
+        ui.btns.loadChallenge.addEventListener('click', () => {
+            ui.inputs.stake.value = "0.35";
+            ui.botSettings.takeProfit.value = "10";
+            ui.botSettings.stopLoss.value = "5";
+            ui.botSettings.strategy.value = "neural";
+            ui.botSettings.strategy.dispatchEvent(new Event('change'));
+            showToast('Small Account Challenge Loaded!', 'success');
+        });
+    }
+
+    // Checkbox persistence
+    ['useFilter', 'avoidSqueeze', 'useMartingale', 'smart-risk', 'use-ai-filter', 'lock-params'].forEach(id => {
+        const el = document.getElementById(id);
+        if(el) el.addEventListener('change', saveSettings);
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     try {
         initChart();
