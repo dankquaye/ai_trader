@@ -714,6 +714,88 @@ function aggregateTick(time, price) {
     }
 }
 
+function setupEventListeners() {
+    // Navigation
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const targetId = btn.dataset.target;
+            ui.navBtns.forEach(b => b.classList.remove('active', 'text-blue-500'));
+            btn.classList.add('active', 'text-blue-500');
+            ui.pages.forEach(p => p.classList.add('hidden'));
+            const target = document.getElementById(targetId);
+            if(target) target.classList.remove('hidden');
+        });
+    });
+
+    // Modal
+    ui.modal.closes.forEach(btn => {
+        btn.addEventListener('click', closeModal);
+    });
+
+    // Bot Controls
+    if(ui.btns.startBot) ui.btns.startBot.addEventListener('click', () => {
+        bot.start();
+        ui.btns.startBot.classList.add('hidden');
+        ui.btns.stopBot.classList.remove('hidden');
+        ui.btns.pauseBot.classList.remove('hidden');
+        updateWatchdogStatus('RUNNING');
+    });
+
+    if(ui.btns.stopBot) ui.btns.stopBot.addEventListener('click', () => {
+        bot.stop();
+        ui.btns.startBot.classList.remove('hidden');
+        ui.btns.stopBot.classList.add('hidden');
+        ui.btns.pauseBot.classList.add('hidden');
+        updateWatchdogStatus('STOPPED');
+    });
+
+    if(ui.btns.pauseBot) ui.btns.pauseBot.addEventListener('click', () => {
+        const isPaused = bot.togglePause();
+        const icon = isPaused ? '<i class="fa-solid fa-play"></i>' : '<i class="fa-solid fa-pause"></i>';
+        ui.btns.pauseBot.innerHTML = icon;
+    });
+
+    // Backtest
+    if(ui.backtest.runBtn) ui.backtest.runBtn.addEventListener('click', runBacktest);
+
+    // Inputs
+    if(ui.inputs.duration) ui.inputs.duration.addEventListener('change', () => {
+        bot.setDuration(parseInt(ui.inputs.duration.value));
+        saveSettings();
+    });
+
+    if(ui.inputs.stake) ui.inputs.stake.addEventListener('change', () => {
+        bot.setStake(parseFloat(ui.inputs.stake.value));
+        saveSettings();
+    });
+
+    if(ui.assetSelector) ui.assetSelector.addEventListener('change', () => {
+        bot.setSymbol(ui.assetSelector.value);
+        saveSettings();
+    });
+
+    // Manual Trade
+    if(ui.btns.rise) ui.btns.rise.addEventListener('click', () => {
+        api.placeTrade('rise', bot.currentStake, bot.duration, bot.currentSymbol);
+    });
+    if(ui.btns.fall) ui.btns.fall.addEventListener('click', () => {
+        api.placeTrade('fall', bot.currentStake, bot.duration, bot.currentSymbol);
+    });
+
+    // Strategy
+    if(ui.botSettings.strategy) ui.botSettings.strategy.addEventListener('change', () => {
+        const strategy = ui.botSettings.strategy.value;
+        renderStrategyParams(strategy);
+        bot.updateConfig(strategy, ui.botSettings.risk.value);
+        saveSettings();
+    });
+
+    // Presets
+    document.querySelectorAll('.btn-preset').forEach(btn => {
+        btn.addEventListener('click', () => applyPreset(btn.dataset.preset));
+    });
+}
+
 // --- API Events ---
 
 function setupApiCallbacks() {
