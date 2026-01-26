@@ -1,0 +1,3 @@
+## 2024-01-26 - Broken App State & Invisible Modal
+**Learning:** The application relied on CSS utility classes (`.opacity-0`, `.pointer-events-none`) that were missing from the build. This caused an invisible modal overlay to block all user interactions. Additionally, the core JS logic `setupEventListeners` was missing, rendering the app non-functional.
+**Action:** When working on "micro-UX", first verify the app's basic functionality. If critical CSS/JS is missing, "restoring" it is a prerequisite. Also, ensure modal overlays always have `pointer-events-none` when hidden to prevent interaction blocking.
