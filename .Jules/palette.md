@@ -1,0 +1,3 @@
+## 2024-05-23 - Accessibility in Dynamic UIs
+**Learning:** Interactive elements like modal close "X" icons are often implemented as `div`s with click listeners, making them inaccessible to keyboard and screen reader users. Additionally, changing the state of a button (like Pause/Resume) visually via icons is insufficient; the `aria-label` must also be dynamically updated to convey the current action to assistive technology.
+**Action:** Always use `<button>` for clickable actions. When toggling button states via JS, ensure `setAttribute('aria-label', ...)` is updated alongside the visual icon change.
