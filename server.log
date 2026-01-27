@@ -1,0 +1,8 @@
+127.0.0.1 - - [27/Jan/2026 18:31:00] "GET /index.html HTTP/1.1" 200 -
+127.0.0.1 - - [27/Jan/2026 18:31:00] "GET /dist/output.css HTTP/1.1" 200 -
+127.0.0.1 - - [27/Jan/2026 18:31:00] "GET /bot.js HTTP/1.1" 200 -
+127.0.0.1 - - [27/Jan/2026 18:31:00] "GET /optimizer.js HTTP/1.1" 200 -
+127.0.0.1 - - [27/Jan/2026 18:31:00] "GET /backtest.js HTTP/1.1" 200 -
+127.0.0.1 - - [27/Jan/2026 18:31:00] "GET /deriv-api.js HTTP/1.1" 200 -
+127.0.0.1 - - [27/Jan/2026 18:31:00] "GET /ai-filter.js HTTP/1.1" 200 -
+127.0.0.1 - - [27/Jan/2026 18:31:00] "GET /app.js HTTP/1.1" 200 -
