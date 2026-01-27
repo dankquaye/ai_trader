@@ -68,7 +68,6 @@ const ui = {
     marketEntropy: document.getElementById('market-entropy'),
     aiStatus: document.getElementById('ai-status'),
     healthStatus: document.getElementById('health-status'),
-    watchdogStatus: document.getElementById('watchdog-status'),
     gradeStats: {
         a: document.getElementById('grade-a'),
         b: document.getElementById('grade-b'),
@@ -76,7 +75,6 @@ const ui = {
         d: document.getElementById('grade-d'),
         f: document.getElementById('grade-f')
     },
-    recoveryBadge: document.getElementById('recovery-badge'),
     backtest: {
         asset: document.getElementById('bt-asset'),
         count: document.getElementById('bt-count'),
@@ -846,3 +844,206 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast('Initialization Error: ' + e.message, 'error');
     }
 });
+
+function setupEventListeners() {
+    // --- Trading Controls ---
+    ui.btns.rise.addEventListener('click', () => {
+        const stake = parseFloat(ui.inputs.stake.value);
+        const duration = parseInt(ui.inputs.duration.value);
+        if (bot.isRunning) return showToast('Stop bot to trade manually', 'error');
+        api.buy('call', stake, duration);
+    });
+
+    ui.btns.fall.addEventListener('click', () => {
+        const stake = parseFloat(ui.inputs.stake.value);
+        const duration = parseInt(ui.inputs.duration.value);
+        if (bot.isRunning) return showToast('Stop bot to trade manually', 'error');
+        api.buy('put', stake, duration);
+    });
+
+    // --- Bot Controls ---
+    ui.btns.startBot.addEventListener('click', () => {
+        if (!ui.tokenInput.value) return showToast('Enter API Token first', 'error');
+
+        bot.start();
+
+        ui.btns.startBot.classList.add('hidden');
+        ui.btns.stopBot.classList.remove('hidden');
+        ui.btns.pauseBot.classList.remove('hidden');
+        ui.btns.killSwitch.classList.remove('hidden');
+
+        showToast('Bot Started', 'success');
+    });
+
+    ui.btns.stopBot.addEventListener('click', () => {
+        bot.stop();
+        stopAutoScanner();
+
+        ui.btns.startBot.classList.remove('hidden');
+        ui.btns.stopBot.classList.add('hidden');
+        ui.btns.pauseBot.classList.add('hidden');
+        ui.btns.killSwitch.classList.add('hidden');
+
+        // Reset Pause State
+        if (bot.isPaused) {
+            bot.isPaused = false;
+            ui.btns.pauseBot.innerHTML = '<i class="fa-solid fa-pause"></i>';
+            ui.btns.pauseBot.setAttribute('aria-label', 'Pause Bot');
+            ui.btns.pauseBot.classList.replace('bg-green-600', 'bg-yellow-600');
+            ui.btns.pauseBot.classList.replace('hover:bg-green-500', 'hover:bg-yellow-500');
+        }
+
+        showToast('Bot Stopped', 'info');
+    });
+
+    ui.btns.pauseBot.addEventListener('click', () => {
+        const isPaused = bot.togglePause();
+        if (isPaused) {
+            ui.btns.pauseBot.innerHTML = '<i class="fa-solid fa-play"></i>';
+            ui.btns.pauseBot.setAttribute('aria-label', 'Resume Bot');
+            ui.btns.pauseBot.classList.replace('bg-yellow-600', 'bg-green-600');
+            ui.btns.pauseBot.classList.replace('hover:bg-yellow-500', 'hover:bg-green-500');
+        } else {
+            ui.btns.pauseBot.innerHTML = '<i class="fa-solid fa-pause"></i>';
+            ui.btns.pauseBot.setAttribute('aria-label', 'Pause Bot');
+            ui.btns.pauseBot.classList.replace('bg-green-600', 'bg-yellow-600');
+            ui.btns.pauseBot.classList.replace('hover:bg-green-500', 'hover:bg-yellow-500');
+        }
+    });
+
+    ui.btns.killSwitch.addEventListener('click', () => {
+        bot.stop();
+        stopAutoScanner();
+        ui.btns.startBot.classList.remove('hidden');
+        ui.btns.stopBot.classList.add('hidden');
+        ui.btns.pauseBot.classList.add('hidden');
+        ui.btns.killSwitch.classList.add('hidden');
+        showToast('EMERGENCY STOP ACTIVATED', 'error');
+    });
+
+    // --- Inputs & Config ---
+    ui.tokenInput.addEventListener('change', (e) => {
+        if (e.target.value) api.authorize(e.target.value);
+    });
+
+    ui.accountSelector.addEventListener('change', (e) => {
+        bot.setAccountType(e.target.value);
+        showToast(`Switched to ${e.target.value.toUpperCase()} account`);
+    });
+
+    ui.assetSelector.addEventListener('change', (e) => {
+        bot.setSymbol(e.target.value);
+        api.subscribeTicks(e.target.value);
+        api.subscribeCandles(e.target.value, 60);
+        api.subscribeCandles(e.target.value, 300);
+        showToast(`Asset changed to ${e.target.value}`);
+        saveSettings();
+    });
+
+    ui.inputs.duration.addEventListener('change', (e) => {
+        bot.setDuration(parseInt(e.target.value));
+        saveSettings();
+    });
+
+    ui.inputs.stake.addEventListener('change', (e) => {
+        bot.setStake(parseFloat(e.target.value));
+        saveSettings();
+    });
+
+    // --- Navigation ---
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            // Active State
+            ui.navBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            // View Switching
+            const target = btn.dataset.target;
+            ui.pages.forEach(page => {
+                if (page.id === target) {
+                    page.classList.remove('hidden');
+                    // Add fade-in effect
+                    page.classList.add('animate-pulse');
+                    setTimeout(() => page.classList.remove('animate-pulse'), 200);
+                } else {
+                    page.classList.add('hidden');
+                }
+            });
+        });
+    });
+
+    // --- Modal ---
+    ui.modal.closes.forEach(el => {
+        el.addEventListener('click', closeModal);
+    });
+
+    ui.modal.el.addEventListener('click', (e) => {
+        if (e.target === ui.modal.el || e.target.classList.contains('modal-overlay')) {
+            closeModal();
+        }
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeModal();
+    });
+
+    // --- Settings Listeners ---
+    ui.botSettings.strategy.addEventListener('change', (e) => {
+        bot.updateConfig(e.target.value, ui.botSettings.risk.value);
+        renderStrategyParams(e.target.value);
+        saveSettings();
+    });
+
+    ui.botSettings.risk.addEventListener('change', (e) => {
+        bot.updateConfig(ui.botSettings.strategy.value, e.target.value);
+        saveSettings();
+    });
+
+    // Checkboxes
+    const checkboxes = ['useMartingale', 'useSmartRisk', 'useFilter', 'avoidSqueeze', 'autoSelect', 'useAIFilter', 'lockParams'];
+    checkboxes.forEach(id => {
+        if(ui.botSettings[id]) {
+            ui.botSettings[id].addEventListener('change', () => {
+                 if (id === 'autoSelect' && ui.botSettings.autoSelect.checked) startAutoScanner();
+                 if (id === 'autoSelect' && !ui.botSettings.autoSelect.checked) stopAutoScanner();
+                 if (id === 'lockParams') bot.setParamLock(ui.botSettings.lockParams.checked);
+                 if (id === 'useFilter') bot.setFilter(ui.botSettings.useFilter.checked);
+                 if (id === 'useAIFilter') bot.setAIFilter(ui.botSettings.useAIFilter.checked);
+                 saveSettings();
+            });
+        }
+    });
+
+    // Other inputs
+    ['martingaleMultiplier', 'takeProfit', 'stopLoss', 'adxThreshold'].forEach(id => {
+        if(ui.botSettings[id]) {
+            ui.botSettings[id].addEventListener('change', saveSettings);
+        }
+    });
+
+    // Presets
+    document.querySelectorAll('.btn-preset').forEach(btn => {
+        btn.addEventListener('click', () => applyPreset(btn.dataset.preset));
+    });
+
+    // Export
+    ui.btns.exportHistory.addEventListener('click', exportHistory);
+
+    // Backtest
+    if(ui.backtest.runBtn) ui.backtest.runBtn.addEventListener('click', runBacktest);
+
+    // Support
+    if(ui.btns.sendSupport) ui.btns.sendSupport.addEventListener('click', () => {
+        showToast('Message sent! Support will contact you.', 'success');
+        ui.btns.sendSupport.disabled = true;
+    });
+
+    // Load Challenge
+    if(ui.btns.loadChallenge) ui.btns.loadChallenge.addEventListener('click', () => {
+         bot.setSmallAccountMode(true);
+         bot.initialStake = 0.35; // Min stake
+         bot.currentStake = 0.35;
+         ui.inputs.stake.value = "0.35";
+         showToast('Small Account Challenge Loaded! Good luck.');
+    });
+}
