@@ -68,7 +68,6 @@ const ui = {
     marketEntropy: document.getElementById('market-entropy'),
     aiStatus: document.getElementById('ai-status'),
     healthStatus: document.getElementById('health-status'),
-    watchdogStatus: document.getElementById('watchdog-status'),
     gradeStats: {
         a: document.getElementById('grade-a'),
         b: document.getElementById('grade-b'),
@@ -76,7 +75,6 @@ const ui = {
         d: document.getElementById('grade-d'),
         f: document.getElementById('grade-f')
     },
-    recoveryBadge: document.getElementById('recovery-badge'),
     backtest: {
         asset: document.getElementById('bt-asset'),
         count: document.getElementById('bt-count'),
