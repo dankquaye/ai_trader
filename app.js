@@ -834,6 +834,196 @@ function showToast(message, type = 'info') {
     }, 3000);
 }
 
+function setupEventListeners() {
+    // Navigation
+    if (ui.navBtns) {
+        ui.navBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const targetId = btn.getAttribute('data-target');
+                if (!targetId) return;
+
+                ui.navBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+
+                ui.pages.forEach(page => {
+                    if (page.id === targetId) {
+                        page.classList.remove('hidden');
+                    } else {
+                        page.classList.add('hidden');
+                    }
+                });
+            });
+        });
+    }
+
+    // Modal Close
+    if (ui.modal.closes) {
+        ui.modal.closes.forEach(btn => {
+            btn.addEventListener('click', closeModal);
+        });
+    }
+
+    // Bot Controls
+    if (ui.btns.startBot) {
+        ui.btns.startBot.addEventListener('click', () => {
+            if (bot.isRunning) return;
+            bot.start();
+            ui.btns.startBot.classList.add('hidden');
+            ui.btns.stopBot.classList.remove('hidden');
+            ui.btns.pauseBot.classList.remove('hidden');
+            updateWatchdogStatus('RUNNING');
+        });
+    }
+
+    if (ui.btns.stopBot) {
+        ui.btns.stopBot.addEventListener('click', () => {
+            bot.stop();
+            ui.btns.startBot.classList.remove('hidden');
+            ui.btns.stopBot.classList.add('hidden');
+            ui.btns.pauseBot.classList.add('hidden');
+            updateWatchdogStatus('STOPPED');
+        });
+    }
+
+    if (ui.btns.pauseBot) {
+        ui.btns.pauseBot.setAttribute('aria-label', 'Pause Bot'); // Init accessible label
+        ui.btns.pauseBot.addEventListener('click', () => {
+            const isPaused = bot.togglePause();
+            const icon = ui.btns.pauseBot.querySelector('i');
+            if (icon) {
+                icon.className = isPaused ? 'fa-solid fa-play' : 'fa-solid fa-pause';
+            }
+            ui.btns.pauseBot.setAttribute('aria-label', isPaused ? 'Resume Bot' : 'Pause Bot');
+            ui.btns.pauseBot.classList.toggle('bg-yellow-600', !isPaused);
+            ui.btns.pauseBot.classList.toggle('bg-green-600', isPaused);
+        });
+    }
+
+    if (ui.btns.killSwitch) {
+        ui.btns.killSwitch.addEventListener('click', () => {
+            bot.stop();
+            location.reload();
+        });
+    }
+
+    // Manual Trading
+    if (ui.btns.rise) {
+        ui.btns.rise.addEventListener('click', () => {
+             const stake = parseFloat(ui.inputs.stake.value);
+             const duration = parseInt(ui.inputs.duration.value);
+             api.buy('rise', stake, duration);
+        });
+    }
+
+    if (ui.btns.fall) {
+        ui.btns.fall.addEventListener('click', () => {
+             const stake = parseFloat(ui.inputs.stake.value);
+             const duration = parseInt(ui.inputs.duration.value);
+             api.buy('fall', stake, duration);
+        });
+    }
+
+    // Account & Token
+    if (ui.tokenInput) {
+        ui.tokenInput.addEventListener('change', () => {
+            const token = ui.tokenInput.value;
+            if (token) api.authorize(token);
+        });
+    }
+
+    if (ui.accountSelector) {
+        ui.accountSelector.addEventListener('change', () => {
+            bot.setAccountType(ui.accountSelector.value);
+        });
+    }
+
+    // Presets
+    document.querySelectorAll('.btn-preset').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const preset = btn.getAttribute('data-preset');
+            applyPreset(preset);
+        });
+    });
+
+    if (ui.btns.loadChallenge) {
+        ui.btns.loadChallenge.addEventListener('click', () => {
+            bot.setSmallAccountMode(true);
+            applyPreset('conservative'); // Base
+            ui.botSettings.useSmartRisk.checked = true; // Force smart risk
+            showToast('Small Account Challenge Mode Loaded', 'success');
+        });
+    }
+
+    // Backtest
+    if (ui.backtest.runBtn) {
+        ui.backtest.runBtn.addEventListener('click', runBacktest);
+    }
+
+    // Support
+    if (ui.btns.sendSupport) {
+        ui.btns.sendSupport.addEventListener('click', () => {
+            showToast('Message sent! Support will contact you shortly.', 'success');
+        });
+    }
+
+    // Export
+    if (ui.btns.exportHistory) {
+        ui.btns.exportHistory.addEventListener('click', exportHistory);
+    }
+
+    // Auto Select Asset
+    if (ui.botSettings.autoSelect) {
+        ui.botSettings.autoSelect.addEventListener('change', () => {
+            if (ui.botSettings.autoSelect.checked) startAutoScanner();
+            else stopAutoScanner();
+            saveSettings();
+        });
+    }
+
+    // Settings Listeners
+    const settingsInputs = [
+        ui.botSettings.strategy, ui.botSettings.risk, ui.botSettings.useFilter,
+        ui.botSettings.adxThreshold, ui.botSettings.avoidSqueeze, ui.botSettings.lockParams,
+        ui.botSettings.useMartingale, ui.botSettings.useSmartRisk, ui.botSettings.martingaleMultiplier,
+        ui.botSettings.takeProfit, ui.botSettings.stopLoss, ui.inputs.stake, ui.inputs.duration,
+        ui.assetSelector, ui.botSettings.useAIFilter
+    ];
+
+    settingsInputs.forEach(input => {
+        if(input) {
+            input.addEventListener('change', () => {
+                if (input === ui.botSettings.strategy) {
+                    renderStrategyParams(input.value);
+                    bot.updateConfig(input.value, ui.botSettings.risk.value);
+                }
+                if (input === ui.botSettings.risk) {
+                    bot.updateConfig(ui.botSettings.strategy.value, input.value);
+                }
+                if (input === ui.botSettings.useDynamicDuration) {
+                    bot.setDynamicDuration(input.checked);
+                }
+                if (input === ui.assetSelector) {
+                    bot.setSymbol(input.value);
+                    api.subscribeTicks(input.value); // Re-subscribe
+                }
+                 if (input === ui.botSettings.useAIFilter) {
+                    bot.setAIFilter(input.checked);
+                }
+                saveSettings();
+            });
+        }
+    });
+
+    // Dynamic Duration Checkbox
+    const dynDur = document.getElementById('use-dynamic-duration');
+    if(dynDur) {
+        dynDur.addEventListener('change', () => {
+             bot.setDynamicDuration(dynDur.checked);
+             saveSettings();
+        });
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     try {
         initChart();
