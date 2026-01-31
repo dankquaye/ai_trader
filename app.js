@@ -714,6 +714,31 @@ function aggregateTick(time, price) {
     }
 }
 
+function setupEventListeners() {
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            ui.navBtns.forEach(b => b.classList.remove('active', 'text-blue-500'));
+            btn.classList.add('active', 'text-blue-500');
+            ui.pages.forEach(p => p.classList.add('hidden'));
+            document.getElementById(btn.dataset.target).classList.remove('hidden');
+        });
+    });
+
+    ui.modal.closes.forEach(btn => btn.addEventListener('click', closeModal));
+
+    if (ui.btns.rise) ui.btns.rise.addEventListener('click', () => api.buy('call', ui.inputs.stake.value, ui.inputs.duration.value));
+    if (ui.btns.fall) ui.btns.fall.addEventListener('click', () => api.buy('put', ui.inputs.stake.value, ui.inputs.duration.value));
+
+    if (ui.btns.startBot) ui.btns.startBot.addEventListener('click', () => bot.start());
+    if (ui.btns.stopBot) ui.btns.stopBot.addEventListener('click', () => bot.stop());
+
+    document.querySelectorAll('.btn-preset').forEach(btn => {
+        btn.addEventListener('click', () => applyPreset(btn.dataset.preset));
+    });
+
+    if (ui.backtest.runBtn) ui.backtest.runBtn.addEventListener('click', runBacktest);
+}
+
 // --- API Events ---
 
 function setupApiCallbacks() {
