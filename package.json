@@ -12,5 +12,8 @@
   "type": "commonjs",
   "devDependencies": {
     "tailwindcss": "^4.1.18"
+  },
+  "dependencies": {
+    "playwright": "^1.58.1"
   }
 }
