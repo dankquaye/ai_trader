@@ -714,6 +714,119 @@ function aggregateTick(time, price) {
     }
 }
 
+function setupEventListeners() {
+    // Navigation
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const targetId = btn.dataset.target;
+            ui.pages.forEach(p => p.classList.add('hidden'));
+            document.getElementById(targetId).classList.remove('hidden');
+            ui.navBtns.forEach(b => b.classList.remove('active', 'text-blue-500'));
+            btn.classList.add('active', 'text-blue-500');
+        });
+    });
+
+    // Modal
+    ui.modal.closes.forEach(btn => {
+        btn.addEventListener('click', closeModal);
+    });
+
+    ui.modal.el.addEventListener('click', (e) => {
+        if (e.target.classList.contains('modal-overlay')) closeModal();
+    });
+
+    // Bot Controls
+    if (ui.btns.startBot) ui.btns.startBot.addEventListener('click', () => {
+        bot.start();
+        ui.btns.startBot.classList.add('hidden');
+        ui.btns.stopBot.classList.remove('hidden');
+        ui.btns.pauseBot.classList.remove('hidden');
+        showToast('Bot Started', 'success');
+    });
+
+    if (ui.btns.stopBot) ui.btns.stopBot.addEventListener('click', () => {
+        bot.stop();
+        ui.btns.startBot.classList.remove('hidden');
+        ui.btns.stopBot.classList.add('hidden');
+        ui.btns.pauseBot.classList.add('hidden');
+        showToast('Bot Stopped', 'error');
+    });
+
+    if (ui.btns.pauseBot) ui.btns.pauseBot.addEventListener('click', () => {
+        if (!bot.isRunning) return;
+        bot.togglePause();
+        const icon = ui.btns.pauseBot.querySelector('i');
+        if (bot.isPaused) {
+            icon.classList.remove('fa-pause');
+            icon.classList.add('fa-play');
+            ui.btns.pauseBot.setAttribute('aria-label', 'Resume Bot');
+            ui.btns.pauseBot.classList.add('animate-pulse');
+        } else {
+            icon.classList.remove('fa-play');
+            icon.classList.add('fa-pause');
+            ui.btns.pauseBot.setAttribute('aria-label', 'Pause Bot');
+            ui.btns.pauseBot.classList.remove('animate-pulse');
+        }
+    });
+
+    if (ui.btns.killSwitch) ui.btns.killSwitch.addEventListener('click', () => {
+        bot.stop();
+        ui.btns.startBot.classList.remove('hidden');
+        ui.btns.stopBot.classList.add('hidden');
+        ui.btns.pauseBot.classList.add('hidden');
+        showToast('EMERGENCY STOP EXECUTED', 'error');
+    });
+
+    // Presets
+    document.querySelectorAll('.btn-preset').forEach(btn => {
+        btn.addEventListener('click', () => applyPreset(btn.dataset.preset));
+    });
+
+    // Manual Trade
+    if (ui.btns.rise) ui.btns.rise.addEventListener('click', () => {
+        const amount = parseFloat(ui.inputs.stake.value);
+        const duration = parseInt(ui.inputs.duration.value);
+        const symbol = ui.assetSelector.value;
+        if(bot.isRunning && !bot.isPaused) showToast('Pause bot to trade manually', 'error');
+        else api.placeTrade('rise', amount, duration, symbol);
+    });
+
+    if (ui.btns.fall) ui.btns.fall.addEventListener('click', () => {
+        const amount = parseFloat(ui.inputs.stake.value);
+        const duration = parseInt(ui.inputs.duration.value);
+        const symbol = ui.assetSelector.value;
+        if(bot.isRunning && !bot.isPaused) showToast('Pause bot to trade manually', 'error');
+        else api.placeTrade('fall', amount, duration, symbol);
+    });
+
+    // Backtest
+    if (ui.backtest.runBtn) ui.backtest.runBtn.addEventListener('click', runBacktest);
+
+    // Settings
+    if (ui.botSettings.autoSelect) {
+        ui.botSettings.autoSelect.addEventListener('change', () => {
+            if (ui.botSettings.autoSelect.checked) startAutoScanner();
+            else stopAutoScanner();
+            saveSettings();
+        });
+    }
+
+    // Generic Inputs Save
+    document.querySelectorAll('input, select').forEach(input => {
+        if(input.id !== 'api-token-input') {
+            input.addEventListener('change', saveSettings);
+        }
+    });
+
+    // API Token
+    if (ui.tokenInput) {
+        ui.tokenInput.addEventListener('change', (e) => {
+            const token = e.target.value;
+            if (token) api.authorize(token);
+        });
+    }
+}
+
 // --- API Events ---
 
 function setupApiCallbacks() {
