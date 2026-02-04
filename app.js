@@ -714,6 +714,118 @@ function aggregateTick(time, price) {
     }
 }
 
+// --- Event Listeners ---
+
+function setupEventListeners() {
+    // Navigation
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const target = btn.dataset.target;
+            ui.pages.forEach(p => p.classList.add('hidden'));
+            const targetEl = document.getElementById(target);
+            if(targetEl) targetEl.classList.remove('hidden');
+
+            ui.navBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        });
+    });
+
+    // Bot Controls
+    if(ui.btns.startBot) ui.btns.startBot.addEventListener('click', () => {
+        bot.start();
+        ui.btns.startBot.classList.add('hidden');
+        ui.btns.stopBot.classList.remove('hidden');
+        ui.btns.pauseBot.classList.remove('hidden');
+        updateWatchdogStatus('RUNNING');
+    });
+
+    if(ui.btns.stopBot) ui.btns.stopBot.addEventListener('click', () => {
+        bot.stop();
+        ui.btns.startBot.classList.remove('hidden');
+        ui.btns.stopBot.classList.add('hidden');
+        ui.btns.pauseBot.classList.add('hidden');
+        updateWatchdogStatus('STOPPED');
+    });
+
+    if(ui.btns.pauseBot) ui.btns.pauseBot.addEventListener('click', () => {
+        const isPaused = bot.togglePause();
+        const icon = ui.btns.pauseBot.querySelector('i');
+        if(icon) {
+            icon.className = isPaused ? 'fa-solid fa-play' : 'fa-solid fa-pause';
+        }
+        ui.btns.pauseBot.setAttribute('aria-label', isPaused ? 'Resume Bot' : 'Pause Bot');
+    });
+
+    if(ui.btns.killSwitch) ui.btns.killSwitch.addEventListener('click', () => {
+        bot.stop();
+        showToast('KILL SWITCH ACTIVATED', 'error');
+    });
+
+    // Manual Trading
+    if(ui.btns.rise) ui.btns.rise.addEventListener('click', () => {
+         const amount = parseFloat(ui.inputs.stake.value);
+         const duration = parseInt(ui.inputs.duration.value);
+         const symbol = ui.assetSelector.value;
+         api.placeTrade('rise', amount, duration, symbol);
+    });
+
+    if(ui.btns.fall) ui.btns.fall.addEventListener('click', () => {
+         const amount = parseFloat(ui.inputs.stake.value);
+         const duration = parseInt(ui.inputs.duration.value);
+         const symbol = ui.assetSelector.value;
+         api.placeTrade('fall', amount, duration, symbol);
+    });
+
+    // Modal
+    if(ui.modal.closes) ui.modal.closes.forEach(btn => {
+        btn.addEventListener('click', closeModal);
+    });
+
+    // Inputs
+    if(ui.accountSelector) ui.accountSelector.addEventListener('change', () => {
+        bot.setAccountType(ui.accountSelector.value);
+    });
+
+    if(ui.assetSelector) ui.assetSelector.addEventListener('change', () => {
+        bot.setSymbol(ui.assetSelector.value);
+        api.forgetAll('ticks');
+        api.forgetAll('candles');
+        const symbol = ui.assetSelector.value;
+        api.subscribeTicks(symbol);
+        api.subscribeCandles(symbol, 60);
+        api.subscribeCandles(symbol, 300);
+        api.getHistory(symbol);
+    });
+
+    // Strategy Settings
+    if(ui.botSettings.strategy) ui.botSettings.strategy.addEventListener('change', () => {
+        renderStrategyParams(ui.botSettings.strategy.value);
+        bot.updateConfig(ui.botSettings.strategy.value, ui.botSettings.risk.value);
+        saveSettings();
+    });
+
+    // Presets
+    document.querySelectorAll('.btn-preset').forEach(btn => {
+        btn.addEventListener('click', () => applyPreset(btn.dataset.preset));
+    });
+
+    if(ui.btns.loadChallenge) ui.btns.loadChallenge.addEventListener('click', () => {
+         bot.setSmallAccountMode(true);
+         applyPreset('conservative');
+         showToast('Small Account Challenge Loaded!');
+    });
+
+    // Backtest
+    if(ui.backtest.runBtn) ui.backtest.runBtn.addEventListener('click', runBacktest);
+
+    // Token Input
+    if(ui.tokenInput) ui.tokenInput.addEventListener('change', () => {
+        if(ui.tokenInput.value) {
+            api.authorize(ui.tokenInput.value);
+        }
+    });
+}
+
 // --- API Events ---
 
 function setupApiCallbacks() {
