@@ -716,6 +716,54 @@ function aggregateTick(time, price) {
 
 // --- API Events ---
 
+function setupEventListeners() {
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const target = btn.dataset.target;
+            ui.pages.forEach(p => p.classList.add('hidden'));
+            document.getElementById(target).classList.remove('hidden');
+            ui.navBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            if(target === 'platform' && chart) {
+                setTimeout(() => chart.resize(ui.chartContainer.clientWidth, ui.chartContainer.clientHeight), 0);
+            }
+            if(target === 'backtest' && typeof btChart !== 'undefined' && !btChart) initBacktestChart();
+        });
+    });
+
+    ui.modal.closes.forEach(btn => btn.addEventListener('click', closeModal));
+    const overlay = document.querySelector('.modal-overlay');
+    if(overlay) overlay.addEventListener('click', closeModal);
+
+    ui.btns.startBot.addEventListener('click', () => {
+        bot.start();
+        ui.btns.startBot.classList.add('hidden');
+        ui.btns.stopBot.classList.remove('hidden');
+        ui.btns.pauseBot.classList.remove('hidden');
+    });
+
+    ui.btns.stopBot.addEventListener('click', () => {
+        bot.stop();
+        ui.btns.startBot.classList.remove('hidden');
+        ui.btns.stopBot.classList.add('hidden');
+        ui.btns.pauseBot.classList.add('hidden');
+    });
+
+    if(ui.btns.pauseBot) {
+        ui.btns.pauseBot.addEventListener('click', () => {
+             const isPaused = bot.togglePause();
+             const icon = ui.btns.pauseBot.querySelector('i');
+             if(isPaused) {
+                 icon.classList.replace('fa-pause', 'fa-play');
+                 ui.btns.pauseBot.setAttribute('aria-label', 'Resume Bot');
+             } else {
+                 icon.classList.replace('fa-play', 'fa-pause');
+                 ui.btns.pauseBot.setAttribute('aria-label', 'Pause Bot');
+             }
+        });
+    }
+}
+
 function setupApiCallbacks() {
     api.on('authorize', (data) => {
         ui.profile.loginid.innerText = `ID: ${data.loginid}`;
