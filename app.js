@@ -803,35 +803,188 @@ function setupApiCallbacks() {
     api.on('error', (error) => showToast(`Error: ${error.message}`, 'error'));
 }
 
+function setupEventListeners() {
+    // Navigation
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const target = btn.dataset.target;
+            ui.pages.forEach(p => {
+                if(p.id === target) p.classList.remove('hidden');
+                else p.classList.add('hidden');
+            });
+            ui.navBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        });
+    });
+
+    // Inputs
+    ui.inputs.duration.addEventListener('change', saveSettings);
+    ui.inputs.stake.addEventListener('change', saveSettings);
+    ui.assetSelector.addEventListener('change', () => {
+        saveSettings();
+        if(bot.isRunning) bot.stop();
+        api.unsubscribeTicks();
+        api.unsubscribeCandles();
+        api.subscribeTicks(ui.assetSelector.value);
+        api.subscribeCandles(ui.assetSelector.value, 60);
+        api.subscribeCandles(ui.assetSelector.value, 300);
+        api.getHistory(ui.assetSelector.value);
+    });
+
+    // Bot Controls
+    ui.btns.startBot.addEventListener('click', () => {
+        if(!bot.isRunning) {
+            const strategy = ui.botSettings.strategy.value;
+            bot.start(strategy);
+            ui.btns.startBot.classList.add('hidden');
+            ui.btns.stopBot.classList.remove('hidden');
+            ui.btns.pauseBot.classList.remove('hidden');
+            ui.btns.killSwitch.classList.remove('hidden');
+            showToast('Bot Started', 'success');
+        }
+    });
+
+    ui.btns.stopBot.addEventListener('click', () => {
+        if(bot.isRunning) {
+            bot.stop();
+            ui.btns.startBot.classList.remove('hidden');
+            ui.btns.stopBot.classList.add('hidden');
+            ui.btns.pauseBot.classList.add('hidden');
+            ui.btns.killSwitch.classList.add('hidden');
+            showToast('Bot Stopped', 'error');
+        }
+    });
+
+    ui.btns.pauseBot.addEventListener('click', () => {
+        if(bot.isPaused) {
+            bot.resume();
+            ui.btns.pauseBot.innerHTML = '<i class="fa-solid fa-pause"></i>';
+            ui.btns.pauseBot.classList.remove('bg-green-600');
+            ui.btns.pauseBot.classList.add('bg-yellow-600');
+        } else {
+            bot.pause();
+            ui.btns.pauseBot.innerHTML = '<i class="fa-solid fa-play"></i>';
+            ui.btns.pauseBot.classList.remove('bg-yellow-600');
+            ui.btns.pauseBot.classList.add('bg-green-600');
+        }
+    });
+
+    ui.btns.killSwitch.addEventListener('click', () => {
+        bot.stop();
+        window.location.reload();
+    });
+
+    // Settings
+    ui.botSettings.strategy.addEventListener('change', () => {
+        renderStrategyParams(ui.botSettings.strategy.value);
+        saveSettings();
+    });
+
+    ui.botSettings.risk.addEventListener('change', saveSettings);
+    ui.botSettings.useFilter.addEventListener('change', saveSettings);
+    ui.botSettings.adxThreshold.addEventListener('change', saveSettings);
+    ui.botSettings.avoidSqueeze.addEventListener('change', saveSettings);
+    ui.botSettings.autoSelect.addEventListener('change', () => {
+        saveSettings();
+        if(ui.botSettings.autoSelect.checked) startAutoScanner();
+        else stopAutoScanner();
+    });
+    ui.botSettings.lockParams.addEventListener('change', () => {
+        bot.setParamLock(ui.botSettings.lockParams.checked);
+        saveSettings();
+    });
+
+    // Modal
+    ui.modal.closes.forEach(btn => {
+        btn.addEventListener('click', closeModal);
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && document.body.classList.contains('modal-active')) {
+            closeModal();
+        }
+    });
+
+    // Other Buttons
+    ui.btns.exportHistory.addEventListener('click', exportHistory);
+    ui.btns.loadChallenge.addEventListener('click', () => {
+        applyPreset('conservative'); // Default for small account
+        ui.inputs.stake.value = "0.35";
+        showToast('Small Account Challenge Loaded ($0.35 stake)', 'success');
+    });
+
+    // Presets
+    document.querySelectorAll('.btn-preset').forEach(btn => {
+        btn.addEventListener('click', () => applyPreset(btn.dataset.preset));
+    });
+
+    // Backtest
+    if(ui.backtest.runBtn) {
+        ui.backtest.runBtn.addEventListener('click', runBacktest);
+    }
+}
+
 const activeToasts = [];
+
+function removeToast(toast) {
+    if (!toast) return;
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(100%)';
+    setTimeout(() => {
+        if (toast.isConnected) toast.remove();
+        const idx = activeToasts.indexOf(toast);
+        if (idx > -1) activeToasts.splice(idx, 1);
+    }, 300);
+}
+
 function showToast(message, type = 'info') {
     if (activeToasts.length > 3) {
         const old = activeToasts.shift();
-        if(old) old.remove();
+        if (old) removeToast(old);
     }
 
     const container = document.getElementById('toast-container');
     if (!container) return;
+
     const toast = document.createElement('div');
-
     let colorClass = 'bg-blue-600';
-    if (type === 'error') colorClass = 'bg-red-600';
-    if (type === 'success') colorClass = 'bg-green-600';
+    let role = 'status';
+    let ariaLive = 'polite';
+    let iconClass = 'fa-circle-info';
 
-    toast.className = `${colorClass} text-white px-6 py-3 rounded shadow-lg toast flex items-center mb-2 transition-all duration-300`;
-    toast.innerHTML = `<i class="fa-solid ${type === 'error' ? 'fa-circle-exclamation' : 'fa-circle-info'} mr-2"></i><span>${message}</span>`;
+    if (type === 'error') {
+        colorClass = 'bg-red-600';
+        role = 'alert';
+        ariaLive = 'assertive';
+        iconClass = 'fa-circle-exclamation';
+    } else if (type === 'success') {
+        colorClass = 'bg-green-600';
+        iconClass = 'fa-circle-check';
+    }
+
+    toast.className = `${colorClass} text-white px-4 py-3 rounded shadow-lg flex items-center justify-between mb-2 transition-all duration-300 transform translate-x-0 opacity-100 min-w-[280px] max-w-sm`;
+    toast.setAttribute('role', role);
+    toast.setAttribute('aria-live', ariaLive);
+
+    toast.innerHTML = `
+        <div class="flex items-center gap-3">
+            <i class="fa-solid ${iconClass}" aria-hidden="true"></i>
+            <span class="text-sm font-medium leading-tight">${message}</span>
+        </div>
+        <button type="button" class="ml-4 text-white/70 hover:text-white transition-colors p-1 rounded focus:outline-none focus:bg-white/20" aria-label="Dismiss">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
+    `;
+
+    const closeBtn = toast.querySelector('button');
+    closeBtn.onclick = () => removeToast(toast);
 
     container.appendChild(toast);
     activeToasts.push(toast);
 
     setTimeout(() => {
-        toast.style.opacity = '0';
-        setTimeout(() => {
-            toast.remove();
-            const idx = activeToasts.indexOf(toast);
-            if (idx > -1) activeToasts.splice(idx, 1);
-        }, 300);
-    }, 3000);
+        if (toast.isConnected) removeToast(toast);
+    }, 4000);
 }
 
 document.addEventListener('DOMContentLoaded', () => {
