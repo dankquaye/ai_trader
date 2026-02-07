@@ -804,7 +804,17 @@ function setupApiCallbacks() {
 }
 
 function setupEventListeners() {
-    // Navigation
+    setupNavigation();
+    setupInputs();
+    setupBotControls();
+    setupSettings();
+    setupModal();
+    setupOtherButtons();
+    setupPresets();
+    setupBacktestUI();
+}
+
+function setupNavigation() {
     ui.navBtns.forEach(btn => {
         btn.addEventListener('click', () => {
             const target = btn.dataset.target;
@@ -816,8 +826,9 @@ function setupEventListeners() {
             btn.classList.add('active');
         });
     });
+}
 
-    // Inputs
+function setupInputs() {
     ui.inputs.duration.addEventListener('change', saveSettings);
     ui.inputs.stake.addEventListener('change', saveSettings);
     ui.assetSelector.addEventListener('change', () => {
@@ -830,8 +841,9 @@ function setupEventListeners() {
         api.subscribeCandles(ui.assetSelector.value, 300);
         api.getHistory(ui.assetSelector.value);
     });
+}
 
-    // Bot Controls
+function setupBotControls() {
     ui.btns.startBot.addEventListener('click', () => {
         if(!bot.isRunning) {
             const strategy = ui.botSettings.strategy.value;
@@ -873,8 +885,9 @@ function setupEventListeners() {
         bot.stop();
         window.location.reload();
     });
+}
 
-    // Settings
+function setupSettings() {
     ui.botSettings.strategy.addEventListener('change', () => {
         renderStrategyParams(ui.botSettings.strategy.value);
         saveSettings();
@@ -893,8 +906,9 @@ function setupEventListeners() {
         bot.setParamLock(ui.botSettings.lockParams.checked);
         saveSettings();
     });
+}
 
-    // Modal
+function setupModal() {
     ui.modal.closes.forEach(btn => {
         btn.addEventListener('click', closeModal);
     });
@@ -904,21 +918,24 @@ function setupEventListeners() {
             closeModal();
         }
     });
+}
 
-    // Other Buttons
+function setupOtherButtons() {
     ui.btns.exportHistory.addEventListener('click', exportHistory);
     ui.btns.loadChallenge.addEventListener('click', () => {
         applyPreset('conservative'); // Default for small account
         ui.inputs.stake.value = "0.35";
         showToast('Small Account Challenge Loaded ($0.35 stake)', 'success');
     });
+}
 
-    // Presets
+function setupPresets() {
     document.querySelectorAll('.btn-preset').forEach(btn => {
         btn.addEventListener('click', () => applyPreset(btn.dataset.preset));
     });
+}
 
-    // Backtest
+function setupBacktestUI() {
     if(ui.backtest.runBtn) {
         ui.backtest.runBtn.addEventListener('click', runBacktest);
     }
@@ -966,18 +983,36 @@ function showToast(message, type = 'info') {
     toast.setAttribute('role', role);
     toast.setAttribute('aria-live', ariaLive);
 
-    toast.innerHTML = `
-        <div class="flex items-center gap-3">
-            <i class="fa-solid ${iconClass}" aria-hidden="true"></i>
-            <span class="text-sm font-medium leading-tight">${message}</span>
-        </div>
-        <button type="button" class="ml-4 text-white/70 hover:text-white transition-colors p-1 rounded focus:outline-none focus:bg-white/20" aria-label="Dismiss">
-            <i class="fa-solid fa-xmark"></i>
-        </button>
-    `;
+    // Content Container
+    const content = document.createElement('div');
+    content.className = 'flex items-center gap-3';
 
-    const closeBtn = toast.querySelector('button');
+    // Icon
+    const icon = document.createElement('i');
+    icon.className = `fa-solid ${iconClass}`;
+    icon.setAttribute('aria-hidden', 'true');
+    content.appendChild(icon);
+
+    // Message
+    const msgSpan = document.createElement('span');
+    msgSpan.className = 'text-sm font-medium leading-tight';
+    msgSpan.textContent = message;
+    content.appendChild(msgSpan);
+
+    toast.appendChild(content);
+
+    // Close Button
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'ml-4 text-white/70 hover:text-white transition-colors p-1 rounded focus:outline-none focus:bg-white/20';
+    closeBtn.setAttribute('aria-label', 'Dismiss');
+
+    const closeIcon = document.createElement('i');
+    closeIcon.className = 'fa-solid fa-xmark';
+    closeBtn.appendChild(closeIcon);
+
     closeBtn.onclick = () => removeToast(toast);
+    toast.appendChild(closeBtn);
 
     container.appendChild(toast);
     activeToasts.push(toast);
