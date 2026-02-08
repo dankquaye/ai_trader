@@ -834,6 +834,63 @@ function showToast(message, type = 'info') {
     }, 3000);
 }
 
+function setupEventListeners() {
+    const on = (el, type, fn) => el && el.addEventListener(type, fn);
+    const click = (el, fn) => on(el, 'click', fn);
+    const change = (el, fn) => on(el, 'change', fn);
+
+    ui.navBtns.forEach(btn => click(btn, () => {
+        ui.navBtns.forEach(b => b.classList.remove('active', 'text-blue-500'));
+        ui.pages.forEach(p => p.classList.add('hidden'));
+        btn.classList.add('active', 'text-blue-500');
+        const p = document.getElementById(btn.dataset.target);
+        if(p) p.classList.remove('hidden');
+        if(btn.dataset.target === 'platform') initChart();
+    }));
+
+    change(ui.tokenInput, () => { api.setToken(ui.tokenInput.value); api.connect(); });
+    change(ui.assetSelector, () => {
+        bot.setSymbol(ui.assetSelector.value);
+        api.unsubscribeAll();
+        api.subscribeTicks(ui.assetSelector.value);
+        api.subscribeCandles(ui.assetSelector.value, 60);
+        api.subscribeCandles(ui.assetSelector.value, 300);
+    });
+
+    click(ui.btns.startBot, () => { bot.start(); updateBotControls(true); showToast('Bot Started', 'success'); });
+    click(ui.btns.stopBot, () => { bot.stop(); updateBotControls(false); showToast('Bot Stopped'); });
+    click(ui.btns.pauseBot, () => {
+        const paused = bot.togglePause();
+        const icon = ui.btns.pauseBot.querySelector('i');
+        icon.className = `fa-solid ${paused ? 'fa-play' : 'fa-pause'}`;
+        ui.btns.pauseBot.setAttribute('aria-label', paused ? 'Resume Bot' : 'Pause Bot');
+    });
+    click(ui.btns.killSwitch, () => { bot.stop(); updateBotControls(false); showToast('EMERGENCY STOP', 'error'); });
+
+    ui.modal.closes.forEach(b => click(b, closeModal));
+    window.onclick = e => e.target === ui.modal.el && closeModal();
+    window.onkeydown = e => e.key === 'Escape' && closeModal();
+
+    click(ui.backtest.runBtn, runBacktest);
+    document.querySelectorAll('.btn-preset').forEach(b => click(b, () => applyPreset(b.dataset.preset)));
+
+    // Settings (Minimal)
+    const updateConfig = () => {
+        bot.setStake(parseFloat(ui.inputs.stake.value));
+        bot.setDuration(parseInt(ui.inputs.duration.value));
+        saveSettings();
+    };
+    change(ui.inputs.stake, updateConfig);
+    change(ui.inputs.duration, updateConfig);
+}
+
+function updateBotControls(running) {
+    ui.btns.startBot.classList.toggle('hidden', running);
+    ui.btns.stopBot.classList.toggle('hidden', !running);
+    ui.btns.pauseBot.classList.toggle('hidden', !running);
+    ui.btns.killSwitch.classList.toggle('hidden', !running);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     try {
         initChart();
