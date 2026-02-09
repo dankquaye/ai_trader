@@ -834,6 +834,33 @@ function showToast(message, type = 'info') {
     }, 3000);
 }
 
+function setupEventListeners() {
+    // Nav
+    ui.navBtns.forEach(btn => btn.addEventListener('click', () => {
+        ui.navBtns.forEach(b => b.classList.remove('active'));
+        ui.pages.forEach(p => p.classList.add('hidden'));
+        btn.classList.add('active');
+        const t = document.getElementById(btn.dataset.target);
+        if(t) {
+            t.classList.remove('hidden');
+            if(btn.dataset.target === 'platform' && typeof chart !== 'undefined') chart.resize(ui.chartContainer.clientWidth, ui.chartContainer.clientHeight);
+            if(btn.dataset.target === 'backtest' && typeof btChart !== 'undefined') btChart.resize(ui.backtest.chartContainer.clientWidth, ui.backtest.chartContainer.clientHeight);
+        }
+    }));
+
+    // Modal
+    ui.modal.closes.forEach(btn => btn.addEventListener('click', closeModal));
+
+    // Pause Bot (UX)
+    if(ui.btns.pauseBot) ui.btns.pauseBot.addEventListener('click', () => {
+        const isPaused = bot.togglePause();
+        ui.btns.pauseBot.innerHTML = isPaused ? '<i class="fa-solid fa-play"></i>' : '<i class="fa-solid fa-pause"></i>';
+        ui.btns.pauseBot.setAttribute('aria-label', isPaused ? 'Resume Bot' : 'Pause Bot');
+        ui.btns.pauseBot.classList.toggle('bg-yellow-600', !isPaused);
+        ui.btns.pauseBot.classList.toggle('bg-green-600', isPaused);
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     try {
         initChart();
