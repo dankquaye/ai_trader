@@ -714,6 +714,55 @@ function aggregateTick(time, price) {
     }
 }
 
+function setupEventListeners() {
+    // Navigation (Required for UX)
+    ui.navBtns.forEach(btn => btn.addEventListener('click', () => {
+        ui.navBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        ui.pages.forEach(p => p.classList.add('hidden'));
+        document.getElementById(btn.dataset.target).classList.remove('hidden');
+    }));
+
+    // Modal (Accessibility Fixes)
+    ui.modal.closes.forEach(btn => btn.addEventListener('click', closeModal));
+    ui.modal.el.addEventListener('click', (e) => {
+         if (e.target === ui.modal.el || e.target.classList.contains('modal-overlay')) closeModal();
+    });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+
+    // Bot Controls (Required for Pause Button UX)
+    ui.btns.startBot.addEventListener('click', () => {
+        const token = ui.tokenInput.value.trim();
+        if(token && !api.isConnected) { api.setToken(token); api.connect(); }
+        bot.start();
+        ui.btns.startBot.classList.add('hidden');
+        ui.btns.stopBot.classList.remove('hidden');
+        ui.btns.pauseBot.classList.remove('hidden');
+        ui.btns.killSwitch.classList.remove('hidden');
+    });
+
+    ui.btns.stopBot.addEventListener('click', () => {
+        bot.stop();
+        ui.btns.startBot.classList.remove('hidden');
+        ui.btns.stopBot.classList.add('hidden');
+        ui.btns.pauseBot.classList.add('hidden');
+        ui.btns.killSwitch.classList.add('hidden');
+        ui.btns.pauseBot.innerHTML = '<i class="fa-solid fa-pause"></i>';
+        ui.btns.pauseBot.setAttribute('aria-label', 'Pause Bot'); // Reset
+    });
+
+    ui.btns.pauseBot.addEventListener('click', () => {
+        const isPaused = bot.togglePause();
+        ui.btns.pauseBot.innerHTML = isPaused ? '<i class="fa-solid fa-play"></i>' : '<i class="fa-solid fa-pause"></i>';
+        ui.btns.pauseBot.setAttribute('aria-label', isPaused ? 'Resume Bot' : 'Pause Bot'); // Dynamic Label
+    });
+
+    // Connectivity
+    ui.tokenInput.addEventListener('change', () => {
+        if(ui.tokenInput.value.trim()) { api.setToken(ui.tokenInput.value.trim()); api.connect(); }
+    });
+}
+
 // --- API Events ---
 
 function setupApiCallbacks() {
