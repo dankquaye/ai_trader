@@ -16,6 +16,10 @@
         .modal {
             transition: opacity 0.25s ease;
         }
+        .modal.pointer-events-none,
+        .modal.pointer-events-none * {
+            pointer-events: none;
+        }
         body.modal-active {
             overflow-x: hidden;
             overflow-y: visible !important;
