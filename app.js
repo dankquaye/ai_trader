@@ -439,6 +439,32 @@ window.updateWatchdogStatus = (state) => {
     }
 };
 
+function setupEventListeners() {
+    // Navigation
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const target = btn.dataset.target;
+            ui.pages.forEach(p => p.classList.add('hidden'));
+            const targetEl = document.getElementById(target);
+            if(targetEl) targetEl.classList.remove('hidden');
+            ui.navBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        });
+    });
+
+    // Modal Close
+    ui.modal.closes.forEach(btn => btn.addEventListener('click', closeModal));
+    window.addEventListener('click', (e) => {
+        if (e.target.classList.contains('modal-overlay')) closeModal();
+    });
+
+    // Core Interaction (Connection & Bot)
+    if (ui.tokenInput) ui.tokenInput.addEventListener('change', (e) => api && api.setToken(e.target.value));
+    if (ui.accountSelector) ui.accountSelector.addEventListener('change', (e) => api && api.setAccountType(e.target.value));
+    if (ui.btns.startBot) ui.btns.startBot.addEventListener('click', () => bot && bot.start());
+    if (ui.btns.stopBot) ui.btns.stopBot.addEventListener('click', () => bot && bot.stop());
+}
+
 // --- Settings Persistence ---
 
 function saveSettings() {
