@@ -326,3 +326,4 @@ class DerivAPI {
         this.msgHandlers[type] = callback;
     }
 }
+window.DerivAPI = DerivAPI;

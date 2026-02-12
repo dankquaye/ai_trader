@@ -1268,3 +1268,4 @@ TradingBot.prototype.handleVirtualResult = function(isWin) {
         if(window.updateRecoveryStatus) window.updateRecoveryStatus(false);
     }
 };
+window.TradingBot = TradingBot;

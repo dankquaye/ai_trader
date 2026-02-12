@@ -323,3 +323,4 @@ class QLAgent {
         qs[action] = currentQ + this.alpha * (reward - currentQ);
     }
 }
+window.AIFilter = AIFilter;
