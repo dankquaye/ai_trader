@@ -30,11 +30,11 @@ class DerivAPI {
         this.credentials = {
             demo: {
                 appId: 71238,
-                token: '' // User must provide
+                token: 'a8o3x9Wzjsssk1Q' // User must provide
             },
             live: {
                 appId: 71236,
-                token: '' // User must provide
+                token: 'eBcvBVOLY6iZWCl' // User must provide
             }
         };
 
