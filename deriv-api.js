@@ -29,12 +29,10 @@ class DerivAPI {
         // Hardcoded tokens removed for security.
         this.credentials = {
             demo: {
-                appId: 71238,
-                token: '' // User must provide
+                appId: 71238
             },
             live: {
-                appId: 71236,
-                token: '' // User must provide
+                appId: 71236
             }
         };
 
