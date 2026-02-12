@@ -426,6 +426,7 @@ class TradingBot {
         if (this.strategy === 'sma') return this.analyzeSMA(prices);
         if (this.strategy === 'bb') return this.analyzeBB(prices, lastPrice);
         if (this.strategy === 'neural') return this.analyzeNeuralTrend(prices);
+        if (this.strategy === 'patterns') return this.analyzePatterns();
 
         // Advanced Strategies
         if (this.strategy === 'ultra_instinct') return this.analyzeMultiTF();
@@ -480,6 +481,22 @@ class TradingBot {
          if (lastPrice < lastBB.lower && lastRsi < 35) return 'rise';
          if (lastPrice > lastBB.upper && lastRsi > 65) return 'fall';
          return null;
+    }
+
+    analyzePatterns() {
+        if (!window.PatternRecognizer) return null;
+        // Use 1m candles for pattern recognition
+        if (this.candles1m.length < 5) return null;
+
+        const signal = window.PatternRecognizer.analyze(this.candles1m);
+        if (signal) {
+             this.currentTradeReasoning = {
+                 strategy: 'Candlestick Patterns',
+                 pattern: signal,
+                 finalScore: 0.8 // High confidence for patterns
+             };
+        }
+        return signal;
     }
 
     // ============================================================

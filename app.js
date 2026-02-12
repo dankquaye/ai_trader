@@ -10,8 +10,29 @@ window.onerror = function(msg, url, lineNo, columnNo, error) {
 if (typeof DerivAPI === 'undefined') console.error('DerivAPI not loaded. Check deriv-api.js');
 if (typeof TradingBot === 'undefined') console.error('TradingBot not loaded. Check bot.js');
 
+class NotificationManager {
+    constructor() {
+        this.enabled = false;
+        if ('Notification' in window && Notification.permission === 'granted') {
+            this.enabled = true;
+        }
+    }
+    async requestPermission() {
+        if (!('Notification' in window)) return false;
+        const result = await Notification.requestPermission();
+        this.enabled = result === 'granted';
+        return this.enabled;
+    }
+    notify(title, body) {
+        if (this.enabled && 'Notification' in window && Notification.permission === 'granted') {
+            new Notification(title, { body });
+        }
+    }
+}
+
 window.api = new DerivAPI();
 window.bot = new TradingBot(window.api);
+window.notificationManager = new NotificationManager();
 if (typeof Backtester !== 'undefined') window.backtester = new Backtester(window.api, window.bot);
 
 // --- UI Elements ---
@@ -53,7 +74,8 @@ const ui = {
         avoidSqueeze: document.getElementById('avoid-squeeze'),
         autoSelect: document.getElementById('auto-select-asset'),
         useAIFilter: document.getElementById('use-ai-filter'),
-        lockParams: document.getElementById('lock-params')
+        lockParams: document.getElementById('lock-params'),
+        enableNotifications: document.getElementById('enable-notifications')
     },
     profile: {
         loginid: document.getElementById('profile-loginid'),
@@ -450,6 +472,7 @@ function saveSettings() {
         avoidSqueeze: ui.botSettings.avoidSqueeze.checked,
         autoSelect: ui.botSettings.autoSelect.checked,
         lockParams: ui.botSettings.lockParams.checked,
+        enableNotifications: ui.botSettings.enableNotifications.checked,
 
         useMartingale: ui.botSettings.useMartingale.checked,
         useSmartRisk: ui.botSettings.useSmartRisk.checked,
@@ -497,6 +520,11 @@ function loadSettings() {
         if (s.lockParams !== undefined) {
             ui.botSettings.lockParams.checked = s.lockParams;
             bot.setParamLock(s.lockParams);
+        }
+
+        if (s.enableNotifications !== undefined) {
+            ui.botSettings.enableNotifications.checked = s.enableNotifications;
+            if (s.enableNotifications) window.notificationManager.requestPermission();
         }
 
         if (s.useMartingale !== undefined) ui.botSettings.useMartingale.checked = s.useMartingale;
@@ -856,6 +884,21 @@ function setupEventListeners() {
         });
     }
 
+    if(ui.botSettings.enableNotifications) {
+        ui.botSettings.enableNotifications.addEventListener('change', async () => {
+            if(ui.botSettings.enableNotifications.checked) {
+                const granted = await window.notificationManager.requestPermission();
+                if(!granted) {
+                     ui.botSettings.enableNotifications.checked = false;
+                     showToast('Notification permission denied', 'error');
+                } else {
+                     showToast('Notifications Enabled', 'success');
+                }
+            }
+            saveSettings();
+        });
+    }
+
     // Backtest
     if(ui.backtest.runBtn) {
         ui.backtest.runBtn.addEventListener('click', runBacktest);
@@ -955,12 +998,20 @@ function setupApiCallbacks() {
         bot.handleTradeResult(contract);
         api.send({ balance: 1, subscribe: 0 });
         const profit = parseFloat(contract.profit);
-        if (profit > 0) {
+        const isWin = profit > 0;
+
+        if (isWin) {
             showToast(`Trade WON! +$${profit.toFixed(2)}`, 'success');
             playSound('win');
         } else {
             showToast(`Trade LOST! $${profit.toFixed(2)}`, 'error');
             playSound('loss');
+        }
+
+        if (ui.botSettings.enableNotifications && ui.botSettings.enableNotifications.checked) {
+             const title = isWin ? 'Trade WON! 💰' : 'Trade LOST 📉';
+             const body = `${contract.underlying_symbol}: ${isWin ? '+' : ''}$${profit.toFixed(2)}`;
+             window.notificationManager.notify(title, body);
         }
     });
 

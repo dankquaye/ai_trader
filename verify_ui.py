@@ -32,13 +32,26 @@ def run(playwright):
     expect(page.get_by_role("button", name="Balanced AI")).to_be_visible()
     expect(page.get_by_role("button", name="Growth AI")).to_be_visible()
 
-    # 3. Switch to "Test" (Backtest) tab
+    # 3. Check for New Features
+    print("Checking New Features...", flush=True)
+
+    # Check Notification Checkbox
+    print("Checking Notification Checkbox...", flush=True)
+    expect(page.locator("#enable-notifications")).to_be_visible()
+
+    # Check Strategy Dropdown for 'Candlestick Patterns'
+    print("Checking Strategy Dropdown...", flush=True)
+    strategy_select = page.locator("#bot-strategy")
+    expect(strategy_select).to_be_visible()
+    expect(strategy_select).to_contain_text("Candlestick Patterns")
+
+    # 4. Switch to "Test" (Backtest) tab
     print("Navigating to Backtest tab...", flush=True)
     test_nav = page.locator("button.nav-btn").filter(has_text="Test")
     expect(test_nav).to_be_visible()
     test_nav.click()
 
-    # 4. Check Backtest UI
+    # 5. Check Backtest UI
     print("Checking Backtest UI...", flush=True)
     expect(page.get_by_role("heading", name="Strategy Backtester")).to_be_visible()
     expect(page.get_by_role("button", name="Run Simulation")).to_be_visible()
@@ -48,7 +61,7 @@ def run(playwright):
         os.makedirs("verification")
 
     print("Taking screenshot...", flush=True)
-    page.screenshot(path="verification/dashboard.png")
+    page.screenshot(path="verification/dashboard_v2.png")
     print("Screenshot taken.", flush=True)
 
     browser.close()

@@ -207,6 +207,7 @@
                                     <option value="rsi">RSI Reversal</option>
                                     <option value="bb">Bollinger Bands (Reversal)</option>
                                     <option value="sma">SMA Crossover</option>
+                                    <option value="patterns">Candlestick Patterns</option>
                                     <option value="random">Random Walk (Test)</option>
                                 </select>
                             </div>
@@ -303,6 +304,14 @@
                                 <span class="text-[10px] text-gray-500">Disable Optimizer</span>
                              </div>
                              <input type="checkbox" id="lock-params" class="w-5 h-5 rounded bg-gray-900 border-gray-600 text-red-600">
+                        </div>
+
+                         <div class="flex items-center justify-between mb-4 p-3 bg-gray-800 border border-gray-700 rounded">
+                             <div class="flex flex-col">
+                                <span class="text-sm text-gray-400">Notifications</span>
+                                <span class="text-[10px] text-gray-500">Browser Alerts on Trade</span>
+                             </div>
+                             <input type="checkbox" id="enable-notifications" class="w-5 h-5 rounded bg-gray-900 border-gray-600 text-blue-600">
                         </div>
 
                         <div class="flex items-center justify-between mb-4">
@@ -556,6 +565,7 @@
     <script src="deriv-api.js"></script>
     <script src="ai-filter.js"></script>
     <script src="optimizer.js"></script>
+    <script src="patterns.js"></script>
     <script src="bot.js"></script>
     <script src="backtest.js"></script>
     <script src="app.js"></script>
