@@ -714,6 +714,132 @@ function aggregateTick(time, price) {
     }
 }
 
+// --- Event Listeners ---
+
+function setupEventListeners() {
+    // Navigation
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const target = btn.dataset.target;
+            ui.pages.forEach(p => p.classList.add('hidden'));
+            document.getElementById(target).classList.remove('hidden');
+            ui.navBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            window.dispatchEvent(new Event('resize'));
+        });
+    });
+
+    // Account & Token
+    if (ui.accountSelector) {
+        ui.accountSelector.addEventListener('change', (e) => {
+             if(api) api.setAccountType(e.target.value);
+        });
+    }
+    if (ui.tokenInput) {
+        ui.tokenInput.addEventListener('change', (e) => {
+            if(api) api.setToken(e.target.value);
+        });
+    }
+
+    // Bot Controls
+    if (ui.btns.startBot) ui.btns.startBot.addEventListener('click', () => bot.start());
+    if (ui.btns.stopBot) ui.btns.stopBot.addEventListener('click', () => bot.stop());
+    if (ui.btns.pauseBot) ui.btns.pauseBot.addEventListener('click', () => {
+        const paused = bot.togglePause();
+        ui.btns.pauseBot.innerHTML = paused ? '<i class="fa-solid fa-play"></i>' : '<i class="fa-solid fa-pause"></i>';
+        ui.btns.pauseBot.setAttribute('aria-label', paused ? 'Resume Bot' : 'Pause Bot');
+    });
+    if (ui.btns.killSwitch) ui.btns.killSwitch.addEventListener('click', () => {
+        bot.stop();
+        showToast('KILL SWITCH ACTIVATED', 'error');
+    });
+
+    // Modal
+    ui.modal.closes.forEach(btn => {
+        btn.addEventListener('click', closeModal);
+    });
+    window.addEventListener('click', (e) => {
+        if (e.target.classList.contains('modal-overlay')) closeModal();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeModal();
+    });
+
+    // Backtest
+    if (ui.backtest.runBtn) ui.backtest.runBtn.addEventListener('click', runBacktest);
+
+    // Asset & Strategy
+    if (ui.assetSelector) {
+        ui.assetSelector.addEventListener('change', (e) => {
+            if(bot) bot.setSymbol(e.target.value);
+            if(api) {
+                 api.unsubscribeAll();
+                 api.subscribeTicks(e.target.value);
+                 api.subscribeCandles(e.target.value, 60);
+                 api.subscribeCandles(e.target.value, 300);
+            }
+        });
+    }
+    if (ui.botSettings.strategy) {
+        ui.botSettings.strategy.addEventListener('change', (e) => {
+            if(bot) bot.updateConfig(e.target.value, ui.botSettings.risk.value);
+            renderStrategyParams(e.target.value);
+            saveSettings();
+        });
+    }
+    if (ui.botSettings.risk) {
+        ui.botSettings.risk.addEventListener('change', (e) => {
+            if(bot) bot.updateConfig(ui.botSettings.strategy.value, e.target.value);
+            saveSettings();
+        });
+    }
+
+    // Settings Inputs
+    const settingsInputs = [
+        ui.botSettings.useMartingale, ui.botSettings.useSmartRisk,
+        ui.botSettings.martingaleMultiplier, ui.botSettings.takeProfit,
+        ui.botSettings.stopLoss, ui.inputs.stake, ui.inputs.duration,
+        ui.botSettings.useFilter, ui.botSettings.adxThreshold,
+        ui.botSettings.avoidSqueeze, ui.botSettings.autoSelect,
+        ui.botSettings.lockParams, ui.botSettings.useAIFilter
+    ];
+    settingsInputs.forEach(input => {
+        if(input) {
+            input.addEventListener('change', () => {
+                updateBotStateFromUI();
+                saveSettings();
+            });
+        }
+    });
+
+    // Presets
+    document.querySelectorAll('.btn-preset').forEach(btn => {
+        btn.addEventListener('click', () => {
+            applyPreset(btn.dataset.preset);
+        });
+    });
+}
+
+function updateBotStateFromUI() {
+    if(!bot) return;
+    bot.setStake(parseFloat(ui.inputs.stake.value));
+    bot.setDuration(parseInt(ui.inputs.duration.value));
+    bot.setMoneyManagement(
+        ui.botSettings.useMartingale.checked,
+        parseFloat(ui.botSettings.martingaleMultiplier.value),
+        parseFloat(ui.botSettings.takeProfit.value),
+        parseFloat(ui.botSettings.stopLoss.value),
+        ui.botSettings.useSmartRisk.checked
+    );
+    bot.setFilter(
+        ui.botSettings.useFilter.checked,
+        parseInt(ui.botSettings.adxThreshold.value),
+        ui.botSettings.avoidSqueeze.checked
+    );
+    bot.setAIFilter(ui.botSettings.useAIFilter.checked);
+    bot.setParamLock(ui.botSettings.lockParams.checked);
+}
+
 // --- API Events ---
 
 function setupApiCallbacks() {
