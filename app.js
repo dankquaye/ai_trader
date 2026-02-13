@@ -834,6 +834,144 @@ function showToast(message, type = 'info') {
     }, 3000);
 }
 
+function setupEventListeners() {
+    // Navigation
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const target = btn.dataset.target;
+            ui.pages.forEach(p => p.classList.add('hidden'));
+            const targetEl = document.getElementById(target);
+            if(targetEl) targetEl.classList.remove('hidden');
+            ui.navBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        });
+    });
+
+    // Account Selector
+    if (ui.accountSelector) {
+        ui.accountSelector.addEventListener('change', (e) => {
+             if(window.api) window.api.setAccountType(e.target.value);
+        });
+    }
+
+    // Connect / Token Input
+    if (ui.tokenInput) {
+        ui.tokenInput.addEventListener('change', (e) => {
+            if(window.api) window.api.setToken(e.target.value);
+        });
+    }
+
+    // Bot Controls
+    if (ui.btns.startBot) ui.btns.startBot.addEventListener('click', () => window.bot && window.bot.start());
+    if (ui.btns.stopBot) ui.btns.stopBot.addEventListener('click', () => window.bot && window.bot.stop());
+    if (ui.btns.pauseBot) ui.btns.pauseBot.addEventListener('click', () => {
+        if(window.bot) {
+            const paused = window.bot.togglePause();
+            ui.btns.pauseBot.innerHTML = paused ? '<i class="fa-solid fa-play"></i>' : '<i class="fa-solid fa-pause"></i>';
+            ui.btns.pauseBot.setAttribute('aria-label', paused ? 'Resume Bot' : 'Pause Bot');
+        }
+    });
+    if (ui.btns.killSwitch) ui.btns.killSwitch.addEventListener('click', () => {
+        if(window.bot) window.bot.stop();
+        showToast('KILL SWITCH ACTIVATED', 'error');
+    });
+
+    // Modal
+    ui.modal.closes.forEach(btn => {
+        btn.addEventListener('click', closeModal);
+    });
+
+    // Close modal on outside click
+    window.addEventListener('click', (e) => {
+        if (e.target.classList.contains('modal-overlay')) {
+            closeModal();
+        }
+        // Also close on Esc
+    });
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeModal();
+    });
+
+    // Backtest
+    if (ui.backtest.runBtn) ui.backtest.runBtn.addEventListener('click', runBacktest);
+
+    // Asset Selector
+    if (ui.assetSelector) {
+        ui.assetSelector.addEventListener('change', (e) => {
+            if(window.bot) window.bot.setSymbol(e.target.value);
+            if(window.api) {
+                 window.api.unsubscribeAll();
+                 window.api.subscribeTicks(e.target.value);
+                 window.api.subscribeCandles(e.target.value, 60);
+            }
+        });
+    }
+
+    // Strategy Change
+    if (ui.botSettings.strategy) {
+        ui.botSettings.strategy.addEventListener('change', (e) => {
+            if(window.bot) window.bot.updateConfig(e.target.value, ui.botSettings.risk.value);
+            renderStrategyParams(e.target.value);
+            saveSettings();
+        });
+    }
+
+    // Risk Change
+    if (ui.botSettings.risk) {
+        ui.botSettings.risk.addEventListener('change', (e) => {
+            if(window.bot) window.bot.updateConfig(ui.botSettings.strategy.value, e.target.value);
+            saveSettings();
+        });
+    }
+
+    // Inputs Change
+    const settingsInputs = [
+        ui.botSettings.useMartingale, ui.botSettings.useSmartRisk,
+        ui.botSettings.martingaleMultiplier, ui.botSettings.takeProfit,
+        ui.botSettings.stopLoss, ui.inputs.stake, ui.inputs.duration,
+        ui.botSettings.useFilter, ui.botSettings.adxThreshold,
+        ui.botSettings.avoidSqueeze, ui.botSettings.autoSelect,
+        ui.botSettings.lockParams, ui.botSettings.useAIFilter
+    ];
+
+    settingsInputs.forEach(input => {
+        if(input) {
+            input.addEventListener('change', () => {
+                updateBotStateFromUI();
+                saveSettings();
+            });
+        }
+    });
+
+    // Preset Buttons
+    document.querySelectorAll('.btn-preset').forEach(btn => {
+        btn.addEventListener('click', () => {
+            applyPreset(btn.dataset.preset);
+        });
+    });
+}
+
+function updateBotStateFromUI() {
+    if(!window.bot) return;
+    if(ui.inputs.stake) window.bot.setStake(parseFloat(ui.inputs.stake.value));
+    if(ui.inputs.duration) window.bot.setDuration(parseInt(ui.inputs.duration.value));
+
+    window.bot.setMoneyManagement(
+        ui.botSettings.useMartingale ? ui.botSettings.useMartingale.checked : false,
+        parseFloat(ui.botSettings.martingaleMultiplier ? ui.botSettings.martingaleMultiplier.value : 1.5),
+        parseFloat(ui.botSettings.takeProfit ? ui.botSettings.takeProfit.value : 0),
+        parseFloat(ui.botSettings.stopLoss ? ui.botSettings.stopLoss.value : 0),
+        ui.botSettings.useSmartRisk ? ui.botSettings.useSmartRisk.checked : false
+    );
+    window.bot.setFilter(
+        ui.botSettings.useFilter ? ui.botSettings.useFilter.checked : false,
+        parseInt(ui.botSettings.adxThreshold ? ui.botSettings.adxThreshold.value : 25),
+        ui.botSettings.avoidSqueeze ? ui.botSettings.avoidSqueeze.checked : false
+    );
+    if(ui.botSettings.useAIFilter) window.bot.setAIFilter(ui.botSettings.useAIFilter.checked);
+    if(ui.botSettings.lockParams) window.bot.setParamLock(ui.botSettings.lockParams.checked);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     try {
         initChart();
