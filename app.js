@@ -834,6 +834,43 @@ function showToast(message, type = 'info') {
     }, 3000);
 }
 
+function setupEventListeners() {
+    // Navigation (Essential for app usability)
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const target = btn.dataset.target;
+            ui.pages.forEach(p => p.classList.add('hidden'));
+            const targetEl = document.getElementById(target);
+            if(targetEl) targetEl.classList.remove('hidden');
+            ui.navBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        });
+    });
+
+    // Pause Bot (UX Improvement: Dynamic ARIA label)
+    if (ui.btns.pauseBot) {
+         ui.btns.pauseBot.setAttribute('aria-label', 'Pause Bot');
+         ui.btns.pauseBot.addEventListener('click', () => {
+            if(window.bot) {
+                const paused = window.bot.togglePause();
+                ui.btns.pauseBot.innerHTML = paused ? '<i class="fa-solid fa-play"></i>' : '<i class="fa-solid fa-pause"></i>';
+                ui.btns.pauseBot.setAttribute('aria-label', paused ? 'Resume Bot' : 'Pause Bot');
+            }
+        });
+    }
+
+    // Modal (UX Improvement: Accessibility & Keyboard support)
+    ui.modal.closes.forEach(btn => btn.addEventListener('click', closeModal));
+
+    window.addEventListener('click', (e) => {
+        if (e.target.classList.contains('modal-overlay')) closeModal();
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && document.body.classList.contains('modal-active')) closeModal();
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     try {
         initChart();
