@@ -714,6 +714,54 @@ function aggregateTick(time, price) {
     }
 }
 
+function setupEventListeners() {
+    // Navigation
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const target = btn.dataset.target;
+            ui.pages.forEach(p => p.classList.add('hidden'));
+            document.getElementById(target).classList.remove('hidden');
+            ui.navBtns.forEach(b => b.classList.remove('active', 'text-blue-500'));
+            btn.classList.add('active', 'text-blue-500');
+        });
+    });
+
+    // Modal
+    ui.modal.closes.forEach(btn => btn.addEventListener('click', closeModal));
+    ui.modal.el.addEventListener('click', (e) => {
+        if (e.target.classList.contains('modal-overlay')) closeModal();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeModal();
+    });
+
+    // Bot Controls
+    if (ui.btns.startBot) ui.btns.startBot.addEventListener('click', () => bot.start());
+    if (ui.btns.stopBot) ui.btns.stopBot.addEventListener('click', () => bot.stop());
+    if (ui.btns.pauseBot) ui.btns.pauseBot.addEventListener('click', () => {
+        const paused = bot.togglePause();
+        ui.btns.pauseBot.innerHTML = paused ? '<i class="fa-solid fa-play"></i>' : '<i class="fa-solid fa-pause"></i>';
+        ui.btns.pauseBot.setAttribute('aria-label', paused ? 'Resume Bot' : 'Pause Bot');
+    });
+    if (ui.btns.killSwitch) ui.btns.killSwitch.addEventListener('click', () => bot.stop());
+
+    // Settings / Features
+    if (ui.btns.exportHistory) ui.btns.exportHistory.addEventListener('click', exportHistory);
+
+    // Support
+    if (ui.btns.sendSupport) ui.btns.sendSupport.addEventListener('click', () => {
+        showToast('Message sent to support!', 'success');
+    });
+
+    // Presets
+    document.querySelectorAll('.btn-preset').forEach(btn => {
+        btn.addEventListener('click', () => applyPreset(btn.dataset.preset));
+    });
+
+    // Challenge
+    if (ui.btns.loadChallenge) ui.btns.loadChallenge.addEventListener('click', () => applyPreset('conservative'));
+}
+
 // --- API Events ---
 
 function setupApiCallbacks() {
