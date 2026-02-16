@@ -762,11 +762,14 @@ function setupEventListeners() {
     });
 
     // Account & Token
+    // Account & Token (Removed manual token input listener)
+    /*
     ui.tokenInput.addEventListener('change', () => {
         api.setToken(ui.tokenInput.value);
         if (api.isConnected) api.authorize();
         else api.connect();
     });
+    */
 
     ui.accountSelector.addEventListener('change', () => {
         api.setAccountType(ui.accountSelector.value);
@@ -774,7 +777,7 @@ function setupEventListeners() {
 
     // Bot Controls
     ui.btns.startBot.addEventListener('click', () => {
-        if (!api.token) return showToast('Please enter API Token', 'error');
+        // if (!api.token) return showToast('Please enter API Token', 'error'); // Token is now integrated
 
         // Clear history for new session
         updateTradeHistory([], 0, 0, 0);
@@ -1051,7 +1054,10 @@ document.addEventListener('DOMContentLoaded', () => {
         setupApiCallbacks();
         loadSettings();
         loadHistory(); // Load saved history
-        showToast('Please enter your API Token to connect.', 'info');
+
+        // Auto-connect
+        api.connect();
+        showToast('Connecting...', 'info');
     } catch (e) {
         console.error('Init Error:', e);
         showToast('Initialization Error: ' + e.message, 'error');
