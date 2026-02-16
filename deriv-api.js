@@ -77,6 +77,10 @@ class DerivAPI {
             console.log('WebSocket Connected');
             this.isConnected = true;
             this.authorize();
+            // Reset bot state on reconnect to avoid stuck locks
+            if (window.bot && typeof window.bot.resetState === 'function') {
+                window.bot.resetState();
+            }
         };
 
         this.ws.onmessage = (msg) => {

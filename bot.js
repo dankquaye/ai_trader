@@ -77,7 +77,10 @@ class TradingBot {
         this.consecutiveLosses = 0;
         this.lastTradeTime = 0;
         this.tradeHistory = [];
-        this.hasOpenTrade = false;
+        this.hasOpenTrade = false; // Deprecated, use tradeState
+        this.tradeState = 'IDLE'; // IDLE, SIGNAL_CONFIRMED, ORDER_SENT, IN_TRADE, TRADE_CLOSED, COOLDOWN
+        this.MAX_STAKE = 50; // Safety Cap
+        this.STOP_TRADING_LOSSES = 4; // Stop after X consecutive losses
         this.sessionPeakProfit = 0;
         this.riskState = 'NORMAL'; // NORMAL, AGGRESSIVE, PROTECT, WAIT
         this.marketCondition = 'Analyzing';
@@ -97,6 +100,7 @@ class TradingBot {
 
         // --- Learning ---
         this.learning = { totalTrades: 0, wins: 0, threshold: 4.5 };
+        this.learningLog = []; // Detailed trade log for adaptation
 
         // --- Virtual Trading (Recovery) ---
         this.isVirtualRecovery = false;
@@ -272,7 +276,28 @@ class TradingBot {
         this.candles5m = [];
         this.lastSignal = null;
         this.marketCondition = 'Analyzing...';
+        this.resetState(); // Ensure clean slate
         this.log(`Switched to symbol: ${symbol}. State reset.`);
+    }
+
+    resetState() {
+        this.tradeState = 'IDLE';
+        this.hasOpenTrade = false;
+        this.watchdog.state = 'IDLE';
+        this.api.pendingTrade = false;
+        if(this.watchdog.timeoutId) clearTimeout(this.watchdog.timeoutId);
+        this.activeContracts.clear();
+        this.pendingSymbol = null;
+        this.log('Bot state reset.');
+        if(window.updateWatchdogStatus) window.updateWatchdogStatus('IDLE');
+    }
+
+    updateTradeState(newState, reason) {
+        if(this.tradeState !== newState) {
+            this.log(`State Transition: ${this.tradeState} -> ${newState} (${reason})`);
+            this.tradeState = newState;
+            if(window.updateWatchdogStatus) window.updateWatchdogStatus(newState);
+        }
     }
 
     processTick(tick) {
@@ -361,7 +386,7 @@ class TradingBot {
 
         // 1. ANALYZE FIRST (Set Confidence)
         const startSymbol = this.currentSymbol; // Freeze symbol before async analysis
-        let signal = await this.analyze();
+        let result = await this.analyze();
 
         // Safety Check: Did symbol change during analysis?
         if (this.currentSymbol !== startSymbol) {
@@ -369,24 +394,34 @@ class TradingBot {
             return;
         }
 
-        // 2. CALCULATE STAKE & VALIDATE GRADE (After Confidence is set)
-        if (signal) {
-            const canTrade = this.updateStakeWithRisk(); // Returns false if D/F Grade
-            if (!canTrade) signal = null;
-        }
+        // 2. EVALUATE SIGNAL SCORE
+        if (result && result.direction) {
+            this.confidence = result.confidence; // Sync confidence
 
-        // Final Confidence Check
-        let minConfidence = this.isSmallAccount ? 80 : 60;
-        if (signal && this.confidence < minConfidence) {
-            signal = null;
+            // Dynamic Thresholding
+            let threshold = 60;
+            if (this.marketCondition === 'Volatile') threshold = 80;
+            if (this.riskState === 'PROTECT') threshold = 85;
+            if (this.isSmallAccount) threshold = 80;
+
+            if (result.confidence < threshold) {
+                // this.log(`Signal Ignored: Confidence ${result.confidence.toFixed(1)}% < Threshold ${threshold}%`); // Noisy
+                result = null;
+            } else {
+                const canTrade = this.updateStakeWithRisk(); // Returns false if D/F Grade
+                if (!canTrade) result = null;
+            }
         }
 
         // 3. EXECUTE
-        if (signal) {
+        if (result) {
             if (this.isBacktesting) {
-                this.lastSignal = signal;
+                this.lastSignal = result.direction;
             } else {
-                this.watchdogAttemptExecution(signal, startSymbol);
+                if (this.tradeState === 'IDLE') {
+                    this.updateTradeState('SIGNAL_CONFIRMED', `Signal Validated (${result.confidence.toFixed(1)}%)`);
+                    this.watchdogAttemptExecution(result.direction, startSymbol);
+                }
             }
         } else {
             this.lastSignal = null;
@@ -415,31 +450,58 @@ class TradingBot {
     }
 
     async analyze() {
+        // Enforce Regime Rules
+        if (!this.checkMarketRegime(this.strategy)) {
+            // this.log(`Analysis skipped: Regime mismatch (${this.marketCondition} vs ${this.strategy})`); // Too noisy
+            return null;
+        }
+
         const prices = this.ticks;
         const lastPrice = prices[prices.length - 1];
+
+        let signal = null;
 
         if (this.strategy === 'dynamic') {
              if (this.candles1m.length > 20) {
                 const closes = this.candles1m.map(c => c.close);
                 const adx = this.calculateADX(closes, 14).pop() || 0;
-                if (adx > 25) return this.analyzeMultiTF();
+                if (adx > 25) signal = this.analyzeMultiTF();
              }
-             return null;
+        }
+        else if (this.strategy === 'random') signal = Math.random() > 0.5 ? 'rise' : 'fall';
+        else if (this.strategy === 'rsi') signal = this.analyzeRSI(prices, lastPrice);
+        else if (this.strategy === 'sma') signal = this.analyzeSMA(prices);
+        else if (this.strategy === 'bb') signal = this.analyzeBB(prices, lastPrice);
+        else if (this.strategy === 'neural') signal = this.analyzeNeuralTrend(prices);
+        else if (this.strategy === 'ultra_instinct') signal = this.analyzeMultiTF();
+        else if (this.strategy === 'quantum') signal = await this.analyzeQuantumEnlargement();
+
+        // Standardize Signal Object if legacy string returned
+        if (typeof signal === 'string') {
+            return { direction: signal, confidence: this.confidence || 50, strategy: this.strategy };
         }
 
-        if (this.strategy === 'random') return Math.random() > 0.5 ? 'rise' : 'fall';
+        return signal; // Assumes objects returned by advanced strategies
+    }
 
-        // Legacy Strategies
-        if (this.strategy === 'rsi') return this.analyzeRSI(prices, lastPrice);
-        if (this.strategy === 'sma') return this.analyzeSMA(prices);
-        if (this.strategy === 'bb') return this.analyzeBB(prices, lastPrice);
-        if (this.strategy === 'neural') return this.analyzeNeuralTrend(prices);
+    checkMarketRegime(strategy) {
+        if (this.marketCondition === 'Analyzing...') return true; // Allow initial
+        if (strategy === 'random') return true;
 
-        // Advanced Strategies
-        if (this.strategy === 'ultra_instinct') return this.analyzeMultiTF();
-        if (this.strategy === 'quantum') return await this.analyzeQuantumEnlargement();
-
-        return null;
+        if (this.marketCondition === 'Trending') {
+            return ['ultra_instinct', 'neural', 'sma', 'dynamic', 'quantum'].includes(strategy);
+        }
+        if (this.marketCondition === 'Ranging') {
+            return ['rsi', 'bb', 'quantum'].includes(strategy);
+        }
+        if (this.marketCondition === 'Volatile') {
+            // Only specialized strategies or high risk
+            return ['ultra_instinct', 'quantum'].includes(strategy);
+        }
+        if (this.marketCondition === 'Squeeze') {
+            return false; // No trade in squeeze
+        }
+        return true;
     }
 
     // Legacy Analysis Methods
@@ -732,60 +794,65 @@ class TradingBot {
     // ============================================================
 
     watchdogAttemptExecution(direction, symbol) {
-        if (this.watchdog.state !== 'IDLE' && this.watchdog.state !== 'ANALYZING') return;
+        // Strict State Check
+        if (this.tradeState !== 'SIGNAL_CONFIRMED') return;
         if (this.isPaused) return;
-        if (this.hasOpenTrade || this.api.pendingTrade) return;
+
+        // Redundant check for old flags, just in case
+        if (this.api.pendingTrade) return;
 
         if (this.api.latency > 250) {
-            this.log(`Watchdog blocked: High Latency (${this.api.latency}ms).`);
+            this.log(`Execution blocked: High Latency (${this.api.latency}ms).`);
+            this.updateTradeState('IDLE', 'Latency Block');
             return;
         }
 
         // Losing Streak Protection
         if (this.consecutiveLosses >= 2) {
             if (this.confidence < 90 && this.marketCondition !== 'Trending') {
-                this.log(`Watchdog blocked: Losing Streak Protection. Need >90% Confidence or Trending Market.`);
+                this.log(`Execution blocked: Losing Streak Protection.`);
+                this.updateTradeState('IDLE', 'Streak Protection');
                 return;
             }
         }
 
         if (this.isVirtualRecovery) {
             this.executeVirtualTrade(direction);
+            this.updateTradeState('IDLE', 'Virtual Trade Executed');
             return;
         }
 
-        this.setWatchdogState('LOCKED');
+        // Transition to ORDER_SENT
+        this.updateTradeState('ORDER_SENT', 'Placing Order');
 
         const now = Date.now();
         if (this.lastTradeTime && (now - this.lastTradeTime < 2000)) {
-             this.setWatchdogState('IDLE'); // Too fast
+             this.updateTradeState('IDLE', 'Rate Limit');
              return;
         }
         this.lastTradeTime = now;
-        this.hasOpenTrade = true;
+        this.hasOpenTrade = true; // Keep for legacy compatibility if needed
         this.currentTradeExpectedPrice = this.ticks[this.ticks.length-1];
 
-        this.setWatchdogState('EXECUTING');
-
         let tradeDuration = this.useDynamicDuration ? 2 : this.duration;
-        this.log(`[WATCHDOG] Executing ${direction.toUpperCase()} ($${this.currentStake}) on ${symbol}...`);
+        this.log(`[EXEC] Sending ${direction.toUpperCase()} ($${this.currentStake}) on ${symbol}...`);
 
         this.pendingSymbol = symbol;
         this.api.placeTrade(direction, this.currentStake, tradeDuration, symbol);
 
+        // Strict 2s Timeout for Server Confirmation
         this.watchdog.timeoutId = setTimeout(() => {
-            if (this.watchdog.state === 'EXECUTING') {
-                this.log('CRITICAL: Trade execution timed out. Resetting Watchdog.');
-                this.hasOpenTrade = false;
+            if (this.tradeState === 'ORDER_SENT') {
+                this.log('CRITICAL: Order timed out (No Confirmation). Resetting.');
                 this.api.pendingTrade = false;
-                this.setWatchdogState('IDLE');
+                this.resetState();
             }
-        }, 5000);
+        }, 2000);
     }
 
+    // Deprecated but kept for UI compatibility
     setWatchdogState(newState) {
         this.watchdog.state = newState;
-        this.watchdog.lastTransition = Date.now();
         if(window.updateWatchdogStatus) window.updateWatchdogStatus(newState);
     }
 
@@ -797,10 +864,11 @@ class TradingBot {
             this.pendingSymbol = null;
         }
 
-        this.setWatchdogState('MANAGING');
+        this.updateTradeState('IN_TRADE', `Contract ${contractId} Confirmed`);
     }
 
     handleTradeResult(contract) {
+        this.updateTradeState('TRADE_CLOSED', `Profit: ${contract.profit}`);
         this.hasOpenTrade = false;
 
         const profit = parseFloat(contract.profit);
@@ -811,15 +879,25 @@ class TradingBot {
 
         if (contract.contract_id) this.activeContracts.delete(contract.contract_id);
 
-        // Cooldown
-        let cooldownTime = 1000;
+        // Cooldown Logic
+        let cooldownTime = 2000; // Base cooldown increased
         if (!isWin) {
             if (this.consecutiveLosses >= 2) cooldownTime = 10000;
-            if (this.consecutiveLosses >= 4) cooldownTime = 60000;
+
+            // Stop Trading Check
+            if (this.consecutiveLosses >= this.STOP_TRADING_LOSSES) {
+                this.log(`Stopped trading due to ${this.STOP_TRADING_LOSSES} consecutive losses.`);
+                this.updateTradeState('STOPPED', 'Max Consecutive Losses');
+                return; // Do not reset to IDLE
+            }
         }
 
-        this.setWatchdogState('COOLDOWN');
-        setTimeout(() => this.setWatchdogState('IDLE'), cooldownTime);
+        this.updateTradeState('COOLDOWN', `Wait ${cooldownTime}ms`);
+        setTimeout(() => {
+            if (this.tradeState === 'COOLDOWN') {
+                this.updateTradeState('IDLE', 'Cooldown Complete');
+            }
+        }, cooldownTime);
 
         if (!this.isRunning) return;
 
@@ -1088,7 +1166,37 @@ class TradingBot {
     updateLearning(isWin) {
         this.learning.totalTrades++;
         if (isWin) this.learning.wins++;
+
+        // Log Details
+        if (this.currentTradeReasoning) {
+            this.learningLog.push({
+                isWin,
+                reasoning: this.currentTradeReasoning,
+                timestamp: Date.now()
+            });
+            if (this.learningLog.length > 50) this.learningLog.shift();
+        }
+
+        this.adaptConfidence(isWin);
+
         if(window.saveSettings) window.saveSettings();
+    }
+
+    adaptConfidence(isWin) {
+        // Simple adaptation: if winning, slightly lower threshold (more trades), if losing, raise it
+        // This affects the BASE threshold in evaluate() via a modifier if we implemented one.
+        // For now, we'll just log it or adjust the internal 'confidence' bias if persistent.
+
+        const recent = this.learningLog.slice(-5);
+        const recentWins = recent.filter(r => r.isWin).length;
+
+        if (recent.length === 5) {
+            if (recentWins >= 4) {
+               // High Win Rate -> Can afford to be slightly more aggressive (handled in risk state)
+            } else if (recentWins <= 1) {
+               // Low Win Rate -> Handled by consecutive losses, but could also tighten here
+            }
+        }
     }
     log(message) {
         const logContainer = document.getElementById('bot-logs');
@@ -1248,6 +1356,12 @@ class TradingBot {
              this.currentStake = this.initialStake * 1.5;
         } else if (this.riskState === 'PROTECT') {
              this.currentStake = this.initialStake; // Reset to base
+        }
+
+        // Safety Cap
+        if (this.currentStake > this.MAX_STAKE) {
+            this.log(`Stake capped at max ($${this.MAX_STAKE}).`);
+            this.currentStake = this.MAX_STAKE;
         }
 
         return true;
