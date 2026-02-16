@@ -1113,6 +1113,146 @@ class TradingBot {
         if(c.close < c.open) return 'bearish';
         return 'neutral';
     }
+    // ============================================================
+    // Strategy Logic (Missing Implementations)
+    // ============================================================
+
+    analyzeMultiTF() {
+        if (this.candles1m.length < 50) return null;
+
+        // Trend (EMA)
+        const c1m = this.candles1m;
+        const closes1m = c1m.map(c => c.close);
+        const ema20 = this.calculateEMA(closes1m, 20);
+        const ema50 = this.calculateEMA(closes1m, 50);
+        const lastEma20 = ema20[ema20.length - 1];
+        const lastEma50 = ema50[ema50.length - 1];
+        const lastPrice = closes1m[closes1m.length - 1];
+
+        const isUptrend = lastEma20 > lastEma50 && lastPrice > lastEma20;
+        const isDowntrend = lastEma20 < lastEma50 && lastPrice < lastEma20;
+
+        // Momentum (RSI)
+        const rsi = this.calculateRSI(closes1m, 14);
+        const lastRsi = rsi[rsi.length - 1];
+
+        // Volatility (BB)
+        const bb = this.calculateBollingerBands(closes1m, 20, 2);
+        const lastBB = bb[bb.length - 1];
+
+        let signal = null;
+        this.confidence = 60; // Base confidence
+
+        if (isUptrend) {
+            if (lastRsi < 70 && lastPrice > lastBB.middle) {
+                signal = 'rise';
+                if (lastRsi > 50) this.confidence += 10;
+            }
+        } else if (isDowntrend) {
+            if (lastRsi > 30 && lastPrice < lastBB.middle) {
+                signal = 'fall';
+                if (lastRsi < 50) this.confidence += 10;
+            }
+        }
+
+        // Higher Timeframe Confirmation (5m)
+        if (signal && this.candles5m.length > 20) {
+            const closes5m = this.candles5m.map(c => c.close);
+            const ema50_5m = this.calculateEMA(closes5m, 50);
+            const lastEma50_5m = ema50_5m[ema50_5m.length - 1];
+            const lastPrice5m = closes5m[closes5m.length - 1];
+
+            if (signal === 'rise' && lastPrice5m > lastEma50_5m) this.confidence += 15;
+            else if (signal === 'fall' && lastPrice5m < lastEma50_5m) this.confidence += 15;
+            else this.confidence -= 10; // Divergence
+        }
+
+        this.currentTradeReasoning = {
+            strategy: 'Ultra Instinct (Multi-TF)',
+            trend: isUptrend ? 'UP' : (isDowntrend ? 'DOWN' : 'FLAT'),
+            rsi: lastRsi.toFixed(1),
+            finalScore: this.confidence / 100
+        };
+
+        return signal;
+    }
+
+    detectMarketCondition() {
+        if (this.candles1m.length < 50) return;
+
+        const closes = this.candles1m.map(c => c.close);
+        const adx = this.calculateADX(closes, 14);
+        const lastAdx = adx[adx.length - 1] || 0;
+
+        // Simple Regime Detection
+        if (lastAdx > 25) {
+            this.marketCondition = 'Trending';
+        } else {
+            const bb = this.calculateBollingerBands(closes, 20, 2);
+            const lastBB = bb[bb.length - 1];
+            const width = (lastBB.upper - lastBB.lower) / lastBB.middle;
+
+            if (width < 0.002) this.marketCondition = 'Squeeze';
+            else if (width > 0.005) this.marketCondition = 'Volatile';
+            else this.marketCondition = 'Ranging'; // Choppy
+        }
+    }
+
+    determineRiskState() {
+        // State Machine based on recent performance
+        if (this.consecutiveLosses >= 2) {
+            this.setRiskState('PROTECT', 'Consecutive Losses');
+        } else if (this.marketCondition === 'Trending' && this.wins > this.losses) {
+            this.setRiskState('AGGRESSIVE', 'Winning in Trend');
+        } else if (this.marketCondition === 'Ranging') {
+            this.setRiskState('WAIT', 'Ranging Market');
+        } else {
+            this.setRiskState('NORMAL', 'Balanced');
+        }
+    }
+
+    setRiskState(state, reason) {
+        if (this.riskState !== state) {
+            this.riskState = state;
+            this.log(`Risk State changed to ${state} (${reason})`);
+        }
+    }
+
+    adjustParameters() {
+        // Dynamic adjustment based on Risk State
+        if (this.riskState === 'AGGRESSIVE') {
+            this.params.confidenceThreshold = 0.70;
+            this.useDynamicDuration = true;
+        } else if (this.riskState === 'PROTECT') {
+            this.params.confidenceThreshold = 0.90;
+            this.useDynamicDuration = false;
+        } else {
+            this.params.confidenceThreshold = 0.80; // Normal
+        }
+    }
+
+    updateStakeWithRisk() {
+        if (this.riskState === 'WAIT') return false; // Do not trade
+
+        // Check Grade History
+        if (this.gradeHistory.length >= 5) {
+             const avgGrade = this.gradeHistory.reduce((a, b) => a + b, 0) / this.gradeHistory.length;
+             if (avgGrade < 1.5) { // Mostly D's and F's
+                 this.log("Low Grade Average. Skipping Trade.");
+                 return false;
+             }
+        }
+
+        // Adjust Stake
+        if (this.riskState === 'AGGRESSIVE' && this.useSmartRisk) {
+             this.currentStake = this.initialStake * 1.5;
+        } else if (this.riskState === 'PROTECT') {
+             this.currentStake = this.initialStake; // Reset to base
+        }
+
+        return true;
+    }
+
     detectOrderBlock(candles) { return 'neutral'; }
     detectLiquiditySweep(candles) { return 'neutral'; }
     calculateChoppinessIndex(candles, period) { return []; } // Simplified stub for cleanup if unused in main flow or fully implemented
