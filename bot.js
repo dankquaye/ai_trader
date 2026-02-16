@@ -253,6 +253,14 @@ class TradingBot {
         }
     }
 
+    restoreState(history, profit, wins, losses) {
+        this.tradeHistory = history || [];
+        this.totalProfit = profit || 0;
+        this.wins = wins || 0;
+        this.losses = losses || 0;
+        this.log(`Restored ${this.tradeHistory.length} trades from history.`);
+    }
+
     // ============================================================
     // Data Ingestion
     // ============================================================
@@ -531,8 +539,11 @@ class TradingBot {
         const aiBuy = pAI ? pAI.buy : 0;
         const aiSell = pAI ? pAI.sell : 0;
 
-        const rawBuy = (pTrend.buy * activeWTrend + pMom.buy * activeWMom + aiBuy * activeWAI) / (activeWTrend + activeWMom + activeWAI);
-        const rawSell = (pTrend.sell * activeWTrend + pMom.sell * activeWMom + aiSell * activeWAI) / (activeWTrend + activeWMom + activeWAI);
+        const totalWeight = activeWTrend + activeWMom + activeWAI;
+        const safeWeight = totalWeight === 0 ? 1 : totalWeight;
+
+        const rawBuy = (pTrend.buy * activeWTrend + pMom.buy * activeWMom + aiBuy * activeWAI) / safeWeight;
+        const rawSell = (pTrend.sell * activeWTrend + pMom.sell * activeWMom + aiSell * activeWAI) / safeWeight;
 
         const direction = rawBuy > rawSell ? 'rise' : 'fall';
         const votes = direction === 'rise' ? buyVotes : sellVotes;
@@ -1109,7 +1120,9 @@ class TradingBot {
         if (candles.length < period + 1) return 0;
         const returns = [];
         for (let i = candles.length - period; i < candles.length; i++) {
-            returns.push(Math.log(candles[i].close / candles[i-1].close));
+            const ratio = candles[i].close / candles[i-1].close;
+            if (ratio <= 0) returns.push(0); // Safety check
+            else returns.push(Math.log(ratio));
         }
         const min = Math.min(...returns);
         const max = Math.max(...returns);
