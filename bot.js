@@ -801,10 +801,25 @@ class TradingBot {
         // Redundant check for old flags, just in case
         if (this.api.pendingTrade) return;
 
-        if (this.api.latency > 250) {
-            this.log(`Execution blocked: High Latency (${this.api.latency}ms).`);
-            this.updateTradeState('IDLE', 'Latency Block');
+        // Enhanced Latency Logic
+        // < 450ms: Acceptable
+        // 450ms - 700ms: Warn, require high confidence (>= 90%)
+        // > 700ms: Block
+        if (this.api.latency > 700) {
+            this.log(`Execution blocked: Critical Latency (${this.api.latency}ms).`);
+            // Short cooldown before retry to let latency settle
+            this.updateTradeState('COOLDOWN', 'Latency Block');
+            setTimeout(() => {
+                if (this.tradeState === 'COOLDOWN') this.updateTradeState('IDLE', 'Latency Cooldown');
+            }, 1000);
             return;
+        } else if (this.api.latency > 450) {
+            if (this.confidence < 90) {
+                this.log(`Execution blocked: Moderate Latency (${this.api.latency}ms) requires 90% confidence.`);
+                this.updateTradeState('IDLE', 'Latency/Confidence Mismatch');
+                return;
+            }
+            this.log(`Execution Proceeding with Moderate Latency (${this.api.latency}ms) due to High Confidence.`);
         }
 
         // Losing Streak Protection
