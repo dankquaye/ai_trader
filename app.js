@@ -834,6 +834,70 @@ function showToast(message, type = 'info') {
     }, 3000);
 }
 
+function setupEventListeners() {
+    // Navigation
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const targetId = btn.dataset.target;
+            ui.pages.forEach(page => {
+                if (page.id === targetId) {
+                    page.classList.remove('hidden');
+                    page.scrollTop = 0;
+                } else {
+                    page.classList.add('hidden');
+                }
+            });
+            ui.navBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            if (targetId === 'platform' && chart) {
+                chart.resize(ui.chartContainer.clientWidth, ui.chartContainer.clientHeight);
+            }
+            if (targetId === 'backtest' && btChart) {
+                btChart.resize(ui.backtest.chartContainer.clientWidth, ui.backtest.chartContainer.clientHeight);
+            }
+        });
+    });
+
+    // Modal Interactions
+    const closeModalHandler = (e) => {
+        e.preventDefault();
+        closeModal();
+    };
+
+    ui.modal.closes.forEach(el => el.addEventListener('click', closeModalHandler));
+
+    const overlay = document.querySelector('.modal-overlay');
+    if (overlay) {
+        overlay.addEventListener('click', closeModalHandler);
+    }
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !ui.modal.el.classList.contains('opacity-0')) {
+            closeModal();
+        }
+    });
+
+    // Pause Bot Button
+    if (ui.btns.pauseBot) {
+        ui.btns.pauseBot.addEventListener('click', () => {
+            if (!bot) return;
+            const isPaused = bot.togglePause();
+            if (isPaused) {
+                ui.btns.pauseBot.innerHTML = '<i class="fa-solid fa-play"></i>';
+                ui.btns.pauseBot.setAttribute('aria-label', 'Resume Bot');
+                ui.btns.pauseBot.classList.replace('bg-yellow-600', 'bg-green-600');
+                ui.btns.pauseBot.classList.replace('hover:bg-yellow-500', 'hover:bg-green-500');
+            } else {
+                ui.btns.pauseBot.innerHTML = '<i class="fa-solid fa-pause"></i>';
+                ui.btns.pauseBot.setAttribute('aria-label', 'Pause Bot');
+                ui.btns.pauseBot.classList.replace('bg-green-600', 'bg-yellow-600');
+                ui.btns.pauseBot.classList.replace('hover:bg-green-500', 'hover:bg-yellow-500');
+            }
+        });
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     try {
         initChart();
