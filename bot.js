@@ -92,6 +92,7 @@ class TradingBot {
 
         // --- Advanced State ---
         this.quantumState = { pendingSignal: null, startTickIndex: 0, confirmationTicks: 0 };
+        this.lastTradeConfidence = 0;
         this.watchdog = { state: 'IDLE', lastTransition: 0, timeoutId: null };
         this.gradeHistory = [];
         this.gradeStats = { A: 0, B: 0, C: 0, D: 0, F: 0, Total: 0 };
@@ -285,6 +286,7 @@ class TradingBot {
         this.hasOpenTrade = false;
         this.watchdog.state = 'IDLE';
         this.api.pendingTrade = false;
+        this.lastTradeConfidence = 0; // Reset tracking
         if(this.watchdog.timeoutId) clearTimeout(this.watchdog.timeoutId);
         this.activeContracts.clear();
         this.pendingSymbol = null;
@@ -798,6 +800,14 @@ class TradingBot {
         if (this.tradeState !== 'SIGNAL_CONFIRMED') return;
         if (this.isPaused) return;
 
+        // Block Repeated Confidence Levels (Stop over-trading 85%)
+        if (this.confidence <= this.lastTradeConfidence && this.confidence < 95) {
+            this.log(`Execution blocked: Confidence ${this.confidence}% <= Last ${this.lastTradeConfidence}% (Need improvement or >95%).`);
+            this.updateTradeState('IDLE', 'Confidence Stagnation');
+            return;
+        }
+        this.lastTradeConfidence = this.confidence;
+
         // Redundant check for old flags, just in case
         if (this.api.pendingTrade) return;
 
@@ -813,7 +823,12 @@ class TradingBot {
                 if (this.tradeState === 'COOLDOWN') this.updateTradeState('IDLE', 'Latency Cooldown');
             }, 1000);
             return;
-        } else if (this.api.latency > 450) {
+        } else if (this.api.latency > 400) {
+            // Apply Penalty
+            const penalty = (this.api.latency - 400) / 50;
+            this.confidence -= penalty;
+            this.log(`Latency Penalty (${this.api.latency}ms): -${penalty.toFixed(1)}% Confidence.`);
+
             if (this.confidence < 90) {
                 this.log(`Execution blocked: Moderate Latency (${this.api.latency}ms) requires 90% confidence.`);
                 this.updateTradeState('IDLE', 'Latency/Confidence Mismatch');
@@ -841,7 +856,8 @@ class TradingBot {
         this.updateTradeState('ORDER_SENT', 'Placing Order');
 
         const now = Date.now();
-        if (this.lastTradeTime && (now - this.lastTradeTime < 2000)) {
+        // Allow rapid re-entry if high confidence (>95%) to catch trends, otherwise rate limit
+        if (this.confidence <= 95 && this.lastTradeTime && (now - this.lastTradeTime < 2000)) {
              this.updateTradeState('IDLE', 'Rate Limit');
              return;
         }
@@ -888,6 +904,15 @@ class TradingBot {
 
         const profit = parseFloat(contract.profit);
         const isWin = profit > 0;
+
+        // Penalize Low Grade Wins
+        if (isWin) {
+            const grade = this.gradeTrade(true, this.currentTradeReasoning);
+            if (grade === 'D' || grade === 'F') {
+                this.requiredConfidence = Math.min(95, this.requiredConfidence + 2);
+                this.log(`Win with Low Grade (${grade}). Tightening Confidence +2%.`);
+            }
+        }
 
         const storedSymbol = this.activeContracts.get(contract.contract_id);
         const symbol = contract.underlying_symbol || storedSymbol || this.api.activeSymbol || 'Unknown';
@@ -1516,20 +1541,39 @@ TradingBot.prototype.processVirtualTrade = function() {
     }
 };
 
-TradingBot.prototype.handleVirtualResult = function(isWin) {
+TradingBot.prototype.handleVirtualResult = function(isWin, exitReason = null) {
+    // Calculate grade of this virtual trade to ensure quality
+    // Mock currentTradeReasoning if missing for robustness
+    const reasoning = this.currentTradeReasoning || { finalScore: 0.5 };
+    let grade = this.gradeTrade(isWin, reasoning);
+
     if (isWin) {
-        this.virtualWins++;
-        this.virtualLosses = 0;
-        this.log(`[VIRTUAL] WON. Streak: ${this.virtualWins}`);
+        // Quality Check: Only count win if grade is better than D
+        if (!grade.includes('D') && !grade.includes('F')) {
+            this.virtualWins++;
+            this.virtualLosses = 0;
+            this.log(`[VIRTUAL] WON (Grade ${grade}). Streak: ${this.virtualWins}`);
+        } else {
+            this.log(`[VIRTUAL] WON but Low Quality (Grade ${grade}). Streak not incremented.`);
+        }
     } else {
         this.virtualWins = 0;
         this.virtualLosses++;
         this.log(`[VIRTUAL] LOST.`);
     }
-    if (this.virtualWins >= 2) {
-        this.isVirtualRecovery = false;
+
+    // Strengthened Exit Condition: 4 wins needed
+    if (this.virtualWins >= 4) {
+        this.log(`[RECOVERY] 4 Consistent High-Quality Wins. Resuming Real Trading in 5s...`);
+        this.currentStake = this.initialStake; // Reset stake to minimum
         this.consecutiveLosses = 0;
-        this.log(`[RECOVERY] Consistent wins detected. Resuming Real Trading.`);
-        if(window.updateRecoveryStatus) window.updateRecoveryStatus(false);
+        this.isVirtualRecovery = false;
+
+        // Strict cooldown on exit
+        this.updateTradeState('COOLDOWN', 'Recovery Exit');
+        setTimeout(() => {
+            if (this.tradeState === 'COOLDOWN') this.updateTradeState('IDLE', 'Recovery Complete');
+            if(window.updateRecoveryStatus) window.updateRecoveryStatus(false);
+        }, 5000);
     }
 };
