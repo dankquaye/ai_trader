@@ -17,6 +17,7 @@ class TradingBot {
         this.isBacktesting = false;
         this.isPaused = false;
         this.isParamLocked = false;
+        this.lastStrategyChange = 0; // For Rotation Lock
 
         // --- Components ---
         this.aiFilter = new AIFilter();
@@ -81,6 +82,7 @@ class TradingBot {
         this.tradeState = 'IDLE'; // IDLE, SIGNAL_CONFIRMED, ORDER_SENT, IN_TRADE, TRADE_CLOSED, COOLDOWN
         this.MAX_STAKE = 50; // Safety Cap
         this.STOP_TRADING_LOSSES = 4; // Stop after X consecutive losses
+        this.drawdownVelocity = []; // timestamps of losses
         this.sessionPeakProfit = 0;
         this.riskState = 'NORMAL'; // NORMAL, AGGRESSIVE, PROTECT, WAIT
         this.marketCondition = 'Analyzing';
@@ -118,6 +120,9 @@ class TradingBot {
 
     async start() {
         this.isRunning = true;
+        this.lastStrategyChange = Date.now();
+        // Start Integrity Watchdog
+        this.integrityInterval = setInterval(() => this.checkIntegrity(), 60000);
         this.isPaused = false;
         this.currentStake = this.initialStake;
         this.totalProfit = 0;
@@ -146,6 +151,7 @@ class TradingBot {
 
     stop() {
         this.isRunning = false;
+        if(this.integrityInterval) clearInterval(this.integrityInterval);
         this.log('Bot stopped.');
     }
 
@@ -919,19 +925,38 @@ class TradingBot {
 
         if (contract.contract_id) this.activeContracts.delete(contract.contract_id);
 
-        // Cooldown Logic
-        let cooldownTime = 2000; // Base cooldown increased
-        if (!isWin) {
-            if (this.consecutiveLosses >= 2) cooldownTime = 10000;
+        // Adaptive Cooldown Engine using EQS
+        let cooldownTime = 2000; // Base
+        const eqs = this.calculateEQS(contract);
 
-            // Stop Trading Check
+        if (eqs >= 90) cooldownTime = 1000; // Grade A
+        else if (eqs >= 70) cooldownTime = 2000; // Grade B
+        else if (eqs >= 50) cooldownTime = 4000; // Grade C
+        else cooldownTime = 6000; // Grade D
+
+        if (!isWin) {
+            // Loss Penalty
+            cooldownTime *= 2;
+
+            // Drawdown Velocity Tracking
+            this.drawdownVelocity.push(Date.now());
+            this.checkDrawdownVelocity();
+
+            // Enhanced Loss Protection
+            if (this.consecutiveLosses >= 2) {
+                cooldownTime = Math.max(cooldownTime, 10000); // Min 10s
+                this.log(`Consecutive Losses: Extended Cooldown (10s) & Boosting Confidence.`);
+                this.requiredConfidence = Math.min(95, this.requiredConfidence + 5);
+            }
+
             if (this.consecutiveLosses >= this.STOP_TRADING_LOSSES) {
                 this.log(`Stopped trading due to ${this.STOP_TRADING_LOSSES} consecutive losses.`);
                 this.updateTradeState('STOPPED', 'Max Consecutive Losses');
-                return; // Do not reset to IDLE
+                return;
             }
         }
 
+        this.log(`EQS: ${eqs.toFixed(0)} | Cooldown: ${cooldownTime}ms`);
         this.updateTradeState('COOLDOWN', `Wait ${cooldownTime}ms`);
         setTimeout(() => {
             if (this.tradeState === 'COOLDOWN') {
@@ -1047,6 +1072,26 @@ class TradingBot {
                 this.setRiskState('PROTECT', 'Low Grade Drift');
             }
         }
+    }
+
+    // --- Fail-Safes ---
+
+    checkIntegrity() {
+        // State Integrity Watchdog
+        // Checks if bot is stuck in a transient state for too long
+        if (this.tradeState === 'ORDER_SENT' || this.tradeState === 'IN_TRADE') {
+            const stuckTime = Date.now() - this.lastTradeTime;
+            if (stuckTime > 120000) { // 2 minutes stuck
+                this.log('CRITICAL: Bot Stuck in Active State > 2m. Force Reset.');
+                this.resetState();
+            }
+        }
+    }
+
+    triggerCircuitBreaker(reason) {
+        this.log(`CIRCUIT BREAKER TRIGGERED: ${reason}`);
+        this.stop();
+        this.updateTradeState('STOPPED', 'Circuit Breaker');
     }
 
     // ============================================================
@@ -1190,6 +1235,33 @@ class TradingBot {
         const a2 = v2 - v3;
         return (a1 + a2) / 2;
     }
+
+    calculateEQS(trade) {
+        // Execution Quality Score (0-100)
+        // Factors: Latency, Slippage, Early Price Move
+
+        let score = 100;
+
+        // 1. Latency Impact
+        if (this.api.latency > 700) score -= 40;
+        else if (this.api.latency > 450) score -= 20;
+        else if (this.api.latency > 250) score -= 10;
+
+        // 2. Slippage Impact
+        // Assuming trade.entry_tick and trade.barrier (expected price) are available or we track expected
+        // Using generic slippage heuristic if exact data missing
+        if (trade && trade.entry_tick && this.currentTradeExpectedPrice) {
+            const slip = Math.abs(trade.entry_tick - this.currentTradeExpectedPrice);
+            if (slip > 0.5) score -= 30; // High slippage
+            else if (slip > 0.1) score -= 10;
+        }
+
+        // 3. Early Price Move (First 2 ticks post-entry)
+        // If immediate move against trade, lower score
+        // (Requires tracking post-entry ticks, simplified here as placeholder for future expansion)
+
+        return Math.max(0, score);
+    }
     gradeTrade(isWin, reasoning) {
         if (!reasoning) return isWin ? 'B' : 'D';
         const score = reasoning.finalScore || 0;
@@ -1207,35 +1279,67 @@ class TradingBot {
         this.learning.totalTrades++;
         if (isWin) this.learning.wins++;
 
+        // Outcome-Weighted Learning
+        // High confidence loss = heavy penalty
+        // Low latency win = high reward
+        let weight = 1;
+        if (!isWin && this.confidence > 90) weight = 2; // Penalize failed sure-bets
+        if (isWin && this.api.latency < 250) weight = 1.5; // Reward fast execution
+
         // Log Details
         if (this.currentTradeReasoning) {
             this.learningLog.push({
                 isWin,
+                weight,
+                eqs: this.calculateEQS(),
                 reasoning: this.currentTradeReasoning,
                 timestamp: Date.now()
             });
             if (this.learningLog.length > 50) this.learningLog.shift();
         }
 
-        this.adaptConfidence(isWin);
+        this.adaptConfidence(isWin, weight);
+        this.checkStrategyHealth();
 
         if(window.saveSettings) window.saveSettings();
     }
 
-    adaptConfidence(isWin) {
-        // Simple adaptation: if winning, slightly lower threshold (more trades), if losing, raise it
-        // This affects the BASE threshold in evaluate() via a modifier if we implemented one.
-        // For now, we'll just log it or adjust the internal 'confidence' bias if persistent.
+    checkStrategyHealth() {
+        // Strategy Rotation Lock & Health Score
+        if (!this.lastStrategyChange) this.lastStrategyChange = Date.now();
+        const duration = (Date.now() - this.lastStrategyChange) / 60000; // Minutes
 
-        const recent = this.learningLog.slice(-5);
-        const recentWins = recent.filter(r => r.isWin).length;
+        // Health Score (0-100)
+        let health = 100;
+        const recent = this.learningLog.slice(-10);
+        const wins = recent.filter(r => r.isWin).length;
+        health -= (10 - wins) * 10; // Win rate impact
 
-        if (recent.length === 5) {
-            if (recentWins >= 4) {
-               // High Win Rate -> Can afford to be slightly more aggressive (handled in risk state)
-            } else if (recentWins <= 1) {
-               // Low Win Rate -> Handled by consecutive losses, but could also tighten here
-            }
+        const avgEQS = recent.reduce((a, b) => a + (b.eqs || 0), 0) / (recent.length || 1);
+        health -= (100 - avgEQS) * 0.5; // Execution impact
+
+        if (this.drawdownVelocity.length > 1) health -= 20;
+
+        if (health < 40 && duration > 10) { // Min 10 min runtime before switching
+             this.log(`Strategy Health Critical (${health.toFixed(0)}). Suggesting Rotation.`);
+             // Could auto-switch here if multiple strategies enabled
+        }
+    }
+
+    adaptConfidence(isWin, weight = 1) {
+        // Escalation Logic with Weighting
+        if (!isWin) {
+            // Escalation on loss
+            const increase = 3 * weight;
+            this.requiredConfidence = Math.min(95, this.requiredConfidence + increase);
+            this.log(`Loss detected (W:${weight}). Confidence req +${increase}% -> ${this.requiredConfidence.toFixed(1)}%`);
+        } else {
+            // Decay
+            let base = 60;
+            if (this.marketCondition === 'Volatile') base = 80;
+            if (this.riskState === 'PROTECT') base = 85;
+
+            this.requiredConfidence = Math.max(base, this.requiredConfidence - 1);
         }
     }
     log(message) {
@@ -1332,6 +1436,16 @@ class TradingBot {
         const adx = this.calculateADX(closes, 14);
         const lastAdx = adx[adx.length - 1] || 0;
 
+        // Anti-Chop Protection
+        const rsi = this.calculateRSI(closes, 14);
+        const lastRsi = rsi[rsi.length-1];
+        if (lastRsi > 45 && lastRsi < 55 && lastAdx < 20) {
+            this.marketCondition = 'Choppy';
+            // Force WAIT unless confidence is extremely high
+            if (this.riskState !== 'WAIT') this.setRiskState('WAIT', 'Anti-Chop: RSI Flat');
+            return;
+        }
+
         // Simple Regime Detection
         if (lastAdx > 25) {
             this.marketCondition = 'Trending';
@@ -1391,20 +1505,54 @@ class TradingBot {
              }
         }
 
-        // Adjust Stake
-        if (this.riskState === 'AGGRESSIVE' && this.useSmartRisk) {
-             this.currentStake = this.initialStake * 1.5;
-        } else if (this.riskState === 'PROTECT') {
-             this.currentStake = this.initialStake; // Reset to base
-        }
-
-        // Safety Cap
-        if (this.currentStake > this.MAX_STAKE) {
-            this.log(`Stake capped at max ($${this.MAX_STAKE}).`);
-            this.currentStake = this.MAX_STAKE;
+        // Dynamic Stake Calculation
+        if (this.useSmartRisk) {
+            this.currentStake = this.calculateDynamicStake();
+        } else {
+            this.currentStake = this.initialStake;
         }
 
         return true;
+    }
+
+    calculateDynamicStake() {
+        let stake = this.currentStake;
+        if (this.useMartingale) return stake; // Martingale handles its own logic
+
+        // Stake Elasticity
+        if (this.riskState === 'AGGRESSIVE') {
+            stake = this.initialStake * 1.5;
+        } else {
+            stake = this.initialStake;
+        }
+
+        if (this.marketCondition === 'Trending' && this.confidence > 90) {
+            stake *= 1.2; // Gradual growth in strong trend
+        } else if (this.marketCondition === 'Choppy' || this.isVirtualRecovery) {
+            stake = this.initialStake; // Minimal stake
+        } else if (this.api.latency > 450) {
+            stake *= 0.8; // Reduce stake in high latency
+        }
+
+        // Never increase stake after D grade
+        const lastGrade = this.gradeHistory[this.gradeHistory.length - 1];
+        if (lastGrade <= 1) stake = Math.min(stake, this.initialStake);
+
+        return parseFloat(Math.min(stake, this.MAX_STAKE).toFixed(2));
+    }
+
+    checkDrawdownVelocity() {
+        const now = Date.now();
+        // Clean old events (> 5 minutes)
+        this.drawdownVelocity = this.drawdownVelocity.filter(t => now - t < 300000);
+
+        // Trigger PROTECT if > 3 losses in 5 minutes
+        if (this.drawdownVelocity.length >= 3) {
+            if (this.riskState !== 'PROTECT') {
+                this.setRiskState('PROTECT', 'High Drawdown Velocity');
+                this.log('High Loss Speed Detected! Entering PROTECT mode.');
+            }
+        }
     }
 
     detectOrderBlock(candles) { return 'neutral'; }
