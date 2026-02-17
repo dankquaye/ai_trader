@@ -834,6 +834,100 @@ function showToast(message, type = 'info') {
     }, 3000);
 }
 
+function setupEventListeners() {
+    // Navigation
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const targetId = btn.dataset.target;
+            ui.pages.forEach(page => {
+                if (page.id === targetId) page.classList.remove('hidden');
+                else page.classList.add('hidden');
+            });
+            ui.navBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        });
+    });
+
+    // Modal
+    ui.modal.closes.forEach(btn => btn.addEventListener('click', closeModal));
+    const overlay = document.querySelector('.modal-overlay');
+    if (overlay) overlay.addEventListener('click', closeModal);
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !ui.modal.el.classList.contains('opacity-0')) {
+            closeModal();
+        }
+    });
+
+    // Bot Control
+    if (ui.btns.startBot) ui.btns.startBot.addEventListener('click', () => {
+        bot.start();
+        ui.btns.startBot.classList.add('hidden');
+        ui.btns.stopBot.classList.remove('hidden');
+        ui.btns.pauseBot.classList.remove('hidden');
+    });
+
+    if (ui.btns.stopBot) ui.btns.stopBot.addEventListener('click', () => {
+        bot.stop();
+        ui.btns.startBot.classList.remove('hidden');
+        ui.btns.stopBot.classList.add('hidden');
+        ui.btns.pauseBot.classList.add('hidden');
+    });
+
+    if (ui.btns.pauseBot) ui.btns.pauseBot.addEventListener('click', () => {
+         const isPaused = bot.togglePause();
+         const icon = ui.btns.pauseBot.querySelector('i');
+         if(isPaused) {
+             if(icon) {
+                 icon.classList.remove('fa-pause');
+                 icon.classList.add('fa-play');
+             }
+             ui.btns.pauseBot.setAttribute('aria-label', 'Resume Bot');
+             ui.btns.pauseBot.classList.remove('bg-yellow-600', 'hover:bg-yellow-500');
+             ui.btns.pauseBot.classList.add('bg-green-600', 'hover:bg-green-500');
+         } else {
+             if(icon) {
+                 icon.classList.remove('fa-play');
+                 icon.classList.add('fa-pause');
+             }
+             ui.btns.pauseBot.setAttribute('aria-label', 'Pause Bot');
+             ui.btns.pauseBot.classList.remove('bg-green-600', 'hover:bg-green-500');
+             ui.btns.pauseBot.classList.add('bg-yellow-600', 'hover:bg-yellow-500');
+         }
+    });
+
+    if (ui.btns.killSwitch) ui.btns.killSwitch.addEventListener('click', () => {
+        bot.stop();
+        showToast('KILL SWITCH ACTIVATED', 'error');
+        ui.btns.startBot.classList.remove('hidden');
+        ui.btns.stopBot.classList.add('hidden');
+        ui.btns.pauseBot.classList.add('hidden');
+    });
+
+    // Other Actions
+    if (ui.btns.exportHistory) ui.btns.exportHistory.addEventListener('click', exportHistory);
+
+    if (ui.btns.sendSupport) ui.btns.sendSupport.addEventListener('click', () => {
+        showToast('Support message sent! We will reply via email.', 'success');
+        const inputs = document.querySelectorAll('#support input, #support textarea');
+        inputs.forEach(i => i.value = '');
+    });
+
+    if (ui.btns.loadChallenge) ui.btns.loadChallenge.addEventListener('click', () => {
+        applyPreset('growth');
+        ui.navBtns.forEach(b => {
+            if(b.dataset.target === 'ai-robot') b.click();
+        });
+    });
+
+    // Preset Buttons
+    document.querySelectorAll('.btn-preset').forEach(btn => {
+        btn.addEventListener('click', () => {
+            applyPreset(btn.dataset.preset);
+        });
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     try {
         initChart();
