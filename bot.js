@@ -112,6 +112,15 @@ class TradingBot {
 
         this.currentTradeReasoning = null;
         this.currentTradeExpectedPrice = 0;
+        this.decisionTrace = [];
+    }
+
+    addTrace(stage, status, data = {}) {
+        const trace = { time: Date.now(), stage, status, data };
+        this.decisionTrace.push(trace);
+        if (typeof window !== 'undefined') {
+             window.dispatchEvent(new CustomEvent('bot-trace', { detail: trace }));
+        }
     }
 
     // ============================================================
@@ -368,10 +377,12 @@ class TradingBot {
     // ============================================================
 
     async evaluate() {
+        this.decisionTrace = [];
         try {
             await this._evaluateSafe();
         } catch (e) {
             console.error('Bot Evaluation Error:', e);
+            this.addTrace('Error', 'Critical', { message: e.message });
             this.stop();
         }
     }
@@ -575,12 +586,42 @@ class TradingBot {
     async analyzeQuantumEnlargement() {
         if (this.candles1m.length < 50) return null;
 
+        this.addTrace('Quantum', 'Start', { candles: this.candles1m.length });
+
         // Layer 2: Parallel Probability Engines
         const pTrend = this.qtTrendEngine();
+        this.addTrace('Engine', 'Trend', pTrend);
+
         const pMom = this.qtMomentumEngine();
+        this.addTrace('Engine', 'Momentum', pMom);
+
         const pVol = this.qtVolatilityEngine();
+        this.addTrace('Engine', 'Volatility', { val: pVol });
+
         const pNoise = this.qtNoiseEngine();
+        this.addTrace('Engine', 'Noise', { val: pNoise });
+
         const pAI = await this.qtAIEngine();
+        if(pAI) this.addTrace('Engine', 'AI', pAI);
+
+        // --- AI Abstention Logic (Divergence Check) ---
+        let activeAI = pAI;
+        if (pAI) {
+            const techScore = (pTrend.buy + pMom.buy) / 2;
+            const aiScore = pAI.buy;
+            const divergence = Math.abs(techScore - aiScore);
+
+            // If Technicals are strong (>0.7 or <0.3) and AI disagrees significantly (>0.5 diff)
+            // Or if Noise is high, forcing AI to hallucinate
+            const isTechStrong = techScore > 0.7 || techScore < 0.3;
+
+            if (isTechStrong && divergence > 0.5) {
+                 this.addTrace('AI', 'Abstained', { reason: 'Divergence', tech: techScore, ai: aiScore });
+                 this.log(`AI Divergence (Tech: ${techScore.toFixed(2)} vs AI: ${aiScore.toFixed(2)}). Abstaining.`);
+                 activeAI = null;
+            }
+        }
+        // ---------------------------------------------
 
         // Signal Quality Enforcement: Confluence Check
         let buyVotes = 0;
@@ -589,8 +630,8 @@ class TradingBot {
         if (pMom.buy > 0.5) buyVotes++; else sellVotes++;
 
         // AI Vote (Only if Active)
-        if (pAI) {
-            if (pAI.buy > 0.5) buyVotes++; else sellVotes++;
+        if (activeAI) {
+            if (activeAI.buy > 0.5) buyVotes++; else sellVotes++;
         }
 
         if (pVol > 0.7) { buyVotes++; sellVotes++; }
@@ -605,7 +646,7 @@ class TradingBot {
         let activeWNoise = wNoise;
         let activeWAI = wAI;
 
-        if (!pAI) {
+        if (!activeAI) {
             const distribute = wAI / 4;
             activeWTrend += distribute;
             activeWMom += distribute;
@@ -614,8 +655,8 @@ class TradingBot {
             activeWAI = 0;
         }
 
-        const aiBuy = pAI ? pAI.buy : 0;
-        const aiSell = pAI ? pAI.sell : 0;
+        const aiBuy = activeAI ? activeAI.buy : 0;
+        const aiSell = activeAI ? activeAI.sell : 0;
 
         const totalWeight = activeWTrend + activeWMom + activeWAI;
         const safeWeight = totalWeight === 0 ? 1 : totalWeight;
@@ -816,6 +857,7 @@ class TradingBot {
 
         // Block Repeated Confidence Levels (Stop over-trading 85%)
         if (this.confidence <= this.lastTradeConfidence && this.confidence < 95) {
+            this.addTrace('Execution', 'Blocked', { reason: 'Confidence Stagnation', conf: this.confidence, last: this.lastTradeConfidence });
             this.log(`Execution blocked: Confidence ${this.confidence}% <= Last ${this.lastTradeConfidence}% (Need improvement or >95%).`);
             this.updateTradeState('IDLE', 'Confidence Stagnation');
             return;
@@ -830,6 +872,7 @@ class TradingBot {
         // 450ms - 700ms: Warn, require high confidence (>= 90%)
         // > 700ms: Block
         if (this.api.latency > 700) {
+            this.addTrace('Execution', 'Blocked', { reason: 'Critical Latency', latency: this.api.latency });
             this.log(`Execution blocked: Critical Latency (${this.api.latency}ms).`);
             // Short cooldown before retry to let latency settle
             this.updateTradeState('COOLDOWN', 'Latency Block');
@@ -841,9 +884,11 @@ class TradingBot {
             // Apply Penalty
             const penalty = (this.api.latency - 400) / 50;
             this.confidence -= penalty;
+            this.addTrace('Execution', 'Penalty', { reason: 'Moderate Latency', latency: this.api.latency, penalty });
             this.log(`Latency Penalty (${this.api.latency}ms): -${penalty.toFixed(1)}% Confidence.`);
 
             if (this.confidence < 90) {
+                this.addTrace('Execution', 'Blocked', { reason: 'Latency/Confidence Mismatch', conf: this.confidence });
                 this.log(`Execution blocked: Moderate Latency (${this.api.latency}ms) requires 90% confidence.`);
                 this.updateTradeState('IDLE', 'Latency/Confidence Mismatch');
                 return;
@@ -854,6 +899,7 @@ class TradingBot {
         // Losing Streak Protection
         if (this.consecutiveLosses >= 2) {
             if (this.confidence < 90 && this.marketCondition !== 'Trending') {
+                this.addTrace('Execution', 'Blocked', { reason: 'Streak Protection', conf: this.confidence });
                 this.log(`Execution blocked: Losing Streak Protection.`);
                 this.updateTradeState('IDLE', 'Streak Protection');
                 return;
@@ -965,6 +1011,7 @@ class TradingBot {
         }
 
         this.log(`EQS: ${eqs.toFixed(0)} | Cooldown: ${cooldownTime}ms`);
+        if(window.updateEQS) window.updateEQS(eqs);
         this.updateTradeState('COOLDOWN', `Wait ${cooldownTime}ms`);
         setTimeout(() => {
             if (this.tradeState === 'COOLDOWN') {
@@ -1339,6 +1386,8 @@ class TradingBot {
         health -= (100 - avgEQS) * 0.2; // Minor Execution impact
 
         if (this.drawdownVelocity.length > 1) health -= 20;
+
+        if (window.updateHealth) window.updateHealth(health);
 
         if (health < 40 && duration > 10) { // Min 10 min runtime before switching
              this.log(`Strategy Health Critical (${health.toFixed(0)}). Suggesting Rotation.`);

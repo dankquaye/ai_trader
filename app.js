@@ -68,6 +68,7 @@ const ui = {
     marketEntropy: document.getElementById('market-entropy'),
     aiStatus: document.getElementById('ai-status'),
     healthStatus: document.getElementById('health-status'),
+    eqsStatus: document.getElementById('eqs-status'),
     watchdogStatus: document.getElementById('watchdog-status'),
     gradeStats: {
         a: document.getElementById('grade-a'),
@@ -438,6 +439,78 @@ window.updateWatchdogStatus = (state) => {
         else if (state === 'COOLDOWN') statusEl.className = 'font-bold text-purple-400';
     }
 };
+
+window.updateEQS = function(score) {
+    const el = document.getElementById('eqs-status');
+    if(el) {
+        el.innerText = score.toFixed(0);
+        el.className = 'font-bold text-xs sm:text-sm ' + (score >= 90 ? 'text-green-400' : score >= 70 ? 'text-blue-400' : score >= 50 ? 'text-yellow-400' : 'text-red-400');
+    }
+};
+
+window.updateHealth = function(score) {
+    const el = document.getElementById('health-status');
+    if(el) {
+        el.innerText = score.toFixed(0) + '%';
+        el.className = 'font-bold text-xs sm:text-sm ' + (score >= 80 ? 'text-green-400' : score >= 60 ? 'text-yellow-400' : 'text-red-400');
+    }
+};
+
+window.addEventListener('bot-trace', (e) => {
+    const trace = e.detail;
+    if (!trace) return;
+
+    if (trace.stage === 'Engine') {
+        if (trace.status === 'Trend') updateDashScore('trend', trace.data);
+        if (trace.status === 'Momentum') updateDashScore('mom', trace.data);
+        if (trace.status === 'Volatility') updateDashScore('vol', trace.data);
+        if (trace.status === 'AI') {
+             updateDashScore('ai', trace.data);
+             updateAIStatus(trace.data);
+        }
+    } else if (trace.stage === 'AI' && trace.status === 'Abstained') {
+         updateAIStatus(null, 'Abstained');
+         updateDashScore('ai', { buy: 0.5, sell: 0.5 }); // Neutralize
+    }
+});
+
+function updateDashScore(type, data) {
+    const el = document.getElementById(`dash-score-${type}`);
+    if (!el) return;
+
+    let val = '-';
+    if (data.buy !== undefined) {
+        const dir = data.buy > data.sell ? 'B' : 'S';
+        const strength = Math.max(data.buy, data.sell).toFixed(2);
+        val = `${dir}${strength.substring(1)}`;
+        el.className = data.buy > data.sell ? 'text-green-400' : 'text-red-400';
+    } else if (data.val !== undefined) {
+        val = data.val.toFixed(2);
+        el.className = 'text-blue-300';
+    }
+    el.innerText = val;
+}
+
+function updateAIStatus(data, overrideStatus) {
+    const el = document.getElementById('ai-status');
+    if (!el) return;
+
+    if (overrideStatus) {
+        el.innerText = overrideStatus;
+        el.className = 'font-bold text-xs text-yellow-500 animate-pulse';
+        return;
+    }
+
+    if (data && data.buy !== undefined) {
+         const conf = Math.max(data.buy, data.sell);
+         const dir = data.buy > data.sell ? 'BUY' : 'SELL';
+         el.innerText = `${dir} (${(conf*100).toFixed(0)}%)`;
+         el.className = 'font-bold text-xs ' + (dir === 'BUY' ? 'text-green-400' : 'text-red-400');
+    } else {
+         el.innerText = 'Active';
+         el.className = 'font-bold text-xs text-blue-400';
+    }
+}
 
 // --- Persistence ---
 
