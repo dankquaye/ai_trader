@@ -28,11 +28,12 @@ class DerivAPI {
         this.credentials = {
             demo: {
                 appId: 71238,
-                token: localStorage.getItem('deriv_token_demo') || null
+                // Fallback to provided defaults if no local storage
+                token: localStorage.getItem('deriv_token_demo') || 'a8o3x9Wzjsssk1Q'
             },
             live: {
                 appId: 71236,
-                token: localStorage.getItem('deriv_token_live') || null
+                token: localStorage.getItem('deriv_token_live') || 'eBcvBVOLY6iZWCl'
             }
         };
 
