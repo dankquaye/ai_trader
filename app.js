@@ -95,14 +95,14 @@ const ui = {
         logBody: document.getElementById('bt-log-body')
     },
     dashboard: {
-        regime: document.getElementById('dash-regime'),
-        confidence: document.getElementById('dash-confidence'),
-        aiProb: document.getElementById('dash-ai-prob'),
-        signal: document.getElementById('dash-signal'),
-        trend: document.getElementById('dash-score-trend'),
-        mom: document.getElementById('dash-score-mom'),
-        vol: document.getElementById('dash-score-vol'),
-        ai: document.getElementById('dash-score-ai')
+        regime: document.getElementById('dash-regime') || null,
+        confidence: document.getElementById('dash-confidence') || null,
+        aiProb: document.getElementById('dash-ai-prob') || null,
+        signal: document.getElementById('dash-signal') || null,
+        trend: document.getElementById('dash-score-trend') || null,
+        mom: document.getElementById('dash-score-mom') || null,
+        vol: document.getElementById('dash-score-vol') || null,
+        ai: document.getElementById('dash-score-ai') || null
     },
     modal: {
         el: document.getElementById('reasoning-modal'),
@@ -256,30 +256,37 @@ function updateLiveDashboard() {
     if (!bot || !bot.currentTradeReasoning || !ui.dashboard.regime) return;
     const r = bot.currentTradeReasoning;
 
-    ui.dashboard.regime.innerText = r.marketCondition || 'Analyzing';
+    // Safety checks for dashboard elements
+    if(ui.dashboard.regime) ui.dashboard.regime.innerText = r.marketCondition || 'Analyzing';
 
-    ui.dashboard.confidence.innerText = (r.finalScore * 100).toFixed(1) + '%';
-    ui.dashboard.confidence.className = r.finalScore > 0.8 ? "font-bold text-green-400" :
-        (r.finalScore < 0.6 ? "font-bold text-red-400" : "font-bold text-yellow-400");
-
-    if (r.ai) {
-        const prob = r.ai.buy > 0.5 ? r.ai.buy : r.ai.sell;
-        ui.dashboard.aiProb.innerText = (prob * 100).toFixed(1) + '%';
-    } else {
-        ui.dashboard.aiProb.innerText = 'OFF';
+    if(ui.dashboard.confidence) {
+        ui.dashboard.confidence.innerText = (r.finalScore * 100).toFixed(1) + '%';
+        ui.dashboard.confidence.className = r.finalScore > 0.8 ? "font-bold text-green-400" :
+            (r.finalScore < 0.6 ? "font-bold text-red-400" : "font-bold text-yellow-400");
     }
 
-    ui.dashboard.trend.innerText = r.trend ? (r.trend.buy > r.trend.sell ? 'UP' : 'DN') : '-';
-    ui.dashboard.mom.innerText = r.momentum ? (r.momentum.buy > r.momentum.sell ? 'UP' : 'DN') : '-';
-    ui.dashboard.vol.innerText = r.volatility ? r.volatility.toFixed(2) : '-';
-    ui.dashboard.ai.innerText = r.ai ? (r.ai.buy > 0.5 ? 'UP' : 'DN') : '-';
+    if(ui.dashboard.aiProb) {
+        if (r.ai) {
+            const prob = r.ai.buy > 0.5 ? r.ai.buy : r.ai.sell;
+            ui.dashboard.aiProb.innerText = (prob * 100).toFixed(1) + '%';
+        } else {
+            ui.dashboard.aiProb.innerText = 'OFF';
+        }
+    }
 
-    if (bot.quantumState && bot.quantumState.pendingSignal) {
-        ui.dashboard.signal.innerText = `PENDING (${bot.quantumState.confirmationTicks})`;
-        ui.dashboard.signal.className = "font-bold text-yellow-500 animate-pulse";
-    } else {
-        ui.dashboard.signal.innerText = "WAIT";
-        ui.dashboard.signal.className = "font-bold text-gray-500";
+    if(ui.dashboard.trend) ui.dashboard.trend.innerText = r.trend ? (r.trend.buy > r.trend.sell ? 'UP' : 'DN') : '-';
+    if(ui.dashboard.mom) ui.dashboard.mom.innerText = r.momentum ? (r.momentum.buy > r.momentum.sell ? 'UP' : 'DN') : '-';
+    if(ui.dashboard.vol) ui.dashboard.vol.innerText = r.volatility ? r.volatility.toFixed(2) : '-';
+    if(ui.dashboard.ai) ui.dashboard.ai.innerText = r.ai ? (r.ai.buy > 0.5 ? 'UP' : 'DN') : '-';
+
+    if(ui.dashboard.signal) {
+        if (bot.quantumState && bot.quantumState.pendingSignal) {
+            ui.dashboard.signal.innerText = `PENDING (${bot.quantumState.confirmationTicks})`;
+            ui.dashboard.signal.className = "font-bold text-yellow-500 animate-pulse";
+        } else {
+            ui.dashboard.signal.innerText = "WAIT";
+            ui.dashboard.signal.className = "font-bold text-gray-500";
+        }
     }
 }
 

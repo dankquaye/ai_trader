@@ -1113,9 +1113,9 @@ class TradingBot {
     updateGradeDrift(grade) {
         let numericGrade = 0;
         if (grade.startsWith('A')) numericGrade = 4;
-        else if (grade === 'B') numericGrade = 3;
-        else if (grade === 'C') numericGrade = 2;
-        else if (grade === 'D') numericGrade = 1;
+        else if (grade.startsWith('B')) numericGrade = 3;
+        else if (grade.startsWith('C')) numericGrade = 2;
+        else if (grade.startsWith('D')) numericGrade = 1;
 
         this.gradeHistory.push(numericGrade);
         if (this.gradeHistory.length > 10) this.gradeHistory.shift();

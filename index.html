@@ -101,40 +101,6 @@
                 <!-- Chart Container -->
                 <div id="chart-container" class="flex-1 bg-black relative w-full h-full min-h-[200px]"></div>
 
-                <!-- Live Analysis Dashboard (Overlay) -->
-                <div id="live-analysis-panel" class="absolute top-14 right-4 w-64 bg-gray-800/90 backdrop-blur border border-gray-600 rounded-lg shadow-xl p-3 text-xs hidden sm:block">
-                    <h4 class="font-bold text-gray-400 mb-2 border-b border-gray-700 pb-1">Live AI Analysis</h4>
-                    <div class="space-y-2">
-                         <div class="flex justify-between">
-                            <span>Regime:</span>
-                            <span id="dash-regime" class="font-bold text-yellow-400">...</span>
-                        </div>
-                        <div class="flex justify-between">
-                            <span>Confidence:</span>
-                            <span id="dash-confidence" class="font-bold text-blue-400">0%</span>
-                        </div>
-                        <div class="flex justify-between">
-                            <span>AI Prob:</span>
-                            <span id="dash-ai-prob" class="font-bold text-purple-400">0%</span>
-                        </div>
-                        <div class="flex justify-between">
-                            <span>Signal:</span>
-                            <span id="dash-signal" class="font-bold text-gray-500">WAIT</span>
-                        </div>
-                        <div class="mt-2 pt-2 border-t border-gray-700">
-                             <div class="flex justify-between text-[10px] text-gray-500">
-                                <span>Trend</span><span>Mom</span><span>Vol</span><span>AI</span>
-                             </div>
-                             <div class="flex justify-between font-mono font-bold">
-                                <span id="dash-score-trend" class="text-gray-300">-</span>
-                                <span id="dash-score-mom" class="text-gray-300">-</span>
-                                <span id="dash-score-vol" class="text-gray-300">-</span>
-                                <span id="dash-score-ai" class="text-gray-300">-</span>
-                             </div>
-                        </div>
-                    </div>
-                </div>
-
                 <!-- Trading Controls -->
                 <div class="bg-gray-800 p-4 border-t border-gray-700 grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 items-end shrink-0">
                     <!-- Time -->
@@ -328,9 +294,16 @@
                                 <span class="block text-xs text-gray-400">EQS</span>
                                 <span id="eqs-status" class="font-bold text-xs sm:text-sm text-blue-400">--</span>
                             </div>
-                            <div class="bg-gray-900 p-2 rounded border border-gray-700">
+                            <div class="bg-gray-900 p-2 rounded border border-gray-700 col-span-2">
                                 <span class="block text-xs text-gray-400">AI Status</span>
                                 <span id="ai-status" class="font-bold text-xs text-gray-300">Idle</span>
+                            </div>
+                            <!-- Minimal Trace Display -->
+                            <div class="bg-gray-900 p-2 rounded border border-gray-700 col-span-3 grid grid-cols-4 gap-1 text-center font-mono text-[10px]">
+                                <div>T: <span id="dash-score-trend" class="font-bold">-</span></div>
+                                <div>M: <span id="dash-score-mom" class="font-bold">-</span></div>
+                                <div>V: <span id="dash-score-vol" class="font-bold">-</span></div>
+                                <div>A: <span id="dash-score-ai" class="font-bold">-</span></div>
                             </div>
                         </div>
 
