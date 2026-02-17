@@ -28,12 +28,11 @@ class DerivAPI {
         this.credentials = {
             demo: {
                 appId: 71238,
-                // Fallback to provided defaults if no local storage
-                token: localStorage.getItem('deriv_token_demo') || 'a8o3x9Wzjsssk1Q'
+                token: localStorage.getItem('deriv_token_demo') || null
             },
             live: {
                 appId: 71236,
-                token: localStorage.getItem('deriv_token_live') || 'eBcvBVOLY6iZWCl'
+                token: localStorage.getItem('deriv_token_live') || null
             }
         };
 
@@ -62,6 +61,12 @@ class DerivAPI {
         const creds = this.credentials[this.accountType];
         this.appId = creds.appId;
         this.token = creds.token;
+
+        // Try to load from config object if available (injected via console/script)
+        if (!this.token && window.DERIV_CONFIG && window.DERIV_CONFIG[this.accountType]) {
+            this.token = window.DERIV_CONFIG[this.accountType];
+            console.log('Loaded token from external config.');
+        }
 
         if (!this.token) {
             console.warn('Cannot connect: Missing API Token');
@@ -174,12 +179,16 @@ class DerivAPI {
     }
 
     subscribeTicks(symbol) {
+        if (this.activeSubscriptions.ticks === symbol) return;
         this.send({ ticks: symbol, subscribe: 1 });
         this.activeSymbol = symbol;
         this.activeSubscriptions.ticks = symbol;
     }
 
     subscribeCandles(symbol, granularity) {
+        const s = this.activeSubscriptions.candles;
+        if (s && s.symbol === symbol && s.granularity === granularity) return;
+
         this.send({ ticks_history: symbol, end: 'latest', count: 100, style: 'candles', granularity: granularity, subscribe: 1 });
         this.activeSubscriptions.candles = { symbol, granularity };
     }

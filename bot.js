@@ -95,6 +95,7 @@ class TradingBot {
         // --- Advanced State ---
         this.quantumState = { pendingSignal: null, startTickIndex: 0, confirmationTicks: 0 };
         this.lastTradeConfidence = 0;
+        this.fingerprintMemory = new Map(); // Key: Fingerprint, Val: { losses: 0, banUntil: 0 }
         this.watchdog = { state: 'IDLE', lastTransition: 0, timeoutId: null };
         this.gradeHistory = [];
         this.gradeStats = { A: 0, B: 0, C: 0, D: 0, F: 0, Total: 0 };
@@ -397,9 +398,17 @@ class TradingBot {
 
         if (Date.now() < this.cooldownEndTime && !this.isBacktesting) return;
 
+        // Early Rejection: Latency & Basic Checks
+        if (!this.isBacktesting && this.api.latency > 700) return;
+
+        // Optimization: Throttle heavy analysis
+        if (this.marketCondition !== 'Volatile' && this.ticks.length % 2 !== 0 && !this.isBacktesting) {
+             return;
+        }
+
         this.detectMarketCondition();
         this.determineRiskState(); // Update Risk State Machine
-        this.adjustParameters();
+        // this.adjustParameters(); // Removed to preserve learning adjustments
 
         // Enforce WAIT MODE
         if (this.riskState === 'WAIT' && !this.isBacktesting) {
@@ -412,7 +421,7 @@ class TradingBot {
         }
 
         // 1. ANALYZE FIRST (Set Confidence)
-        const startSymbol = this.currentSymbol; // Freeze symbol before async analysis
+        const startSymbol = this.currentSymbol;
         let result = await this.analyze();
 
         // Safety Check: Did symbol change during analysis?
@@ -425,14 +434,14 @@ class TradingBot {
         if (result && result.direction) {
             this.confidence = result.confidence; // Sync confidence
 
-            // Dynamic Thresholding
-            let threshold = 60;
-            if (this.marketCondition === 'Volatile') threshold = 80;
-            if (this.riskState === 'PROTECT') threshold = 85;
-            if (this.isSmallAccount) threshold = 80;
+            // Dynamic Thresholding: Use learned parameters
+            let threshold = this.params.confidenceThreshold * 100;
+
+            // Local overrides for critical states (minimum safety floors)
+            if (this.marketCondition === 'Volatile') threshold = Math.max(threshold, 80);
+            if (this.riskState === 'PROTECT') threshold = Math.max(threshold, 85);
 
             if (result.confidence < threshold) {
-                // this.log(`Signal Ignored: Confidence ${result.confidence.toFixed(1)}% < Threshold ${threshold}%`); // Noisy
                 result = null;
             } else {
                 const canTrade = this.updateStakeWithRisk(); // Returns false if D/F Grade
@@ -851,56 +860,37 @@ class TradingBot {
     // ============================================================
 
     watchdogAttemptExecution(direction, symbol) {
+        // Pre-Execution Gate
+        if (!this.canExecuteTrade(direction, symbol, this.confidence)) {
+             this.updateTradeState('IDLE', 'Execution Gate Rejection');
+             return;
+        }
+
         // Strict State Check
         if (this.tradeState !== 'SIGNAL_CONFIRMED') return;
         if (this.isPaused) return;
 
-        // Block Repeated Confidence Levels (Stop over-trading 85%)
-        if (this.confidence <= this.lastTradeConfidence && this.confidence < 95) {
-            this.addTrace('Execution', 'Blocked', { reason: 'Confidence Stagnation', conf: this.confidence, last: this.lastTradeConfidence });
-            this.log(`Execution blocked: Confidence ${this.confidence}% <= Last ${this.lastTradeConfidence}% (Need improvement or >95%).`);
-            this.updateTradeState('IDLE', 'Confidence Stagnation');
-            return;
-        }
-        this.lastTradeConfidence = this.confidence;
-
-        // Redundant check for old flags, just in case
-        if (this.api.pendingTrade) return;
-
-        // Enhanced Latency Logic
-        // < 450ms: Acceptable
-        // 450ms - 700ms: Warn, require high confidence (>= 90%)
-        // > 700ms: Block
-        if (this.api.latency > 700) {
-            this.addTrace('Execution', 'Blocked', { reason: 'Critical Latency', latency: this.api.latency });
-            this.log(`Execution blocked: Critical Latency (${this.api.latency}ms).`);
-            // Short cooldown before retry to let latency settle
-            this.updateTradeState('COOLDOWN', 'Latency Block');
-            setTimeout(() => {
-                if (this.tradeState === 'COOLDOWN') this.updateTradeState('IDLE', 'Latency Cooldown');
-            }, 1000);
-            return;
-        } else if (this.api.latency > 400) {
-            // Apply Penalty
+        // Latency Penalty Check (Moved logic from Gate to here for specific modification if needed, or rely on Gate)
+        // Gate checks absolute block (>700). Here we apply soft penalty.
+        if (this.api.latency > 400) {
             const penalty = (this.api.latency - 400) / 50;
             this.confidence -= penalty;
-            this.addTrace('Execution', 'Penalty', { reason: 'Moderate Latency', latency: this.api.latency, penalty });
-            this.log(`Latency Penalty (${this.api.latency}ms): -${penalty.toFixed(1)}% Confidence.`);
-
-            if (this.confidence < 90) {
-                this.addTrace('Execution', 'Blocked', { reason: 'Latency/Confidence Mismatch', conf: this.confidence });
-                this.log(`Execution blocked: Moderate Latency (${this.api.latency}ms) requires 90% confidence.`);
-                this.updateTradeState('IDLE', 'Latency/Confidence Mismatch');
-                return;
+            if (this.confidence < 90) { // Post-penalty check
+                 this.log(`Execution blocked: Latency Penalty dropped confidence to ${this.confidence.toFixed(1)}%.`);
+                 this.updateTradeState('IDLE', 'Latency Penalty');
+                 return;
             }
-            this.log(`Execution Proceeding with Moderate Latency (${this.api.latency}ms) due to High Confidence.`);
         }
 
-        // Losing Streak Protection
+        this.lastTradeConfidence = this.confidence;
+
+        // Redundant check for old flags
+        if (this.api.pendingTrade) return;
+
+        // Losing Streak Protection (Redundant with Gate? Gate has simple check, strict check here)
         if (this.consecutiveLosses >= 2) {
-            if (this.confidence < 90 && this.marketCondition !== 'Trending') {
-                this.addTrace('Execution', 'Blocked', { reason: 'Streak Protection', conf: this.confidence });
-                this.log(`Execution blocked: Losing Streak Protection.`);
+            // Require even higher confidence or trend
+            if (this.confidence < 92 && this.marketCondition !== 'Trending') {
                 this.updateTradeState('IDLE', 'Streak Protection');
                 return;
             }
@@ -979,18 +969,23 @@ class TradingBot {
 
         if (contract.contract_id) this.activeContracts.delete(contract.contract_id);
 
-        // Adaptive Cooldown Engine using EQS
+        // Adaptive Cooldown Engine using EQS & Grade
         let cooldownTime = 2000; // Base
         const eqs = this.calculateEQS(contract);
+        const tradeGrade = this.gradeTrade(isWin, this.currentTradeReasoning);
 
-        if (eqs >= 90) cooldownTime = 1000; // Grade A
-        else if (eqs >= 70) cooldownTime = 2000; // Grade B
-        else if (eqs >= 50) cooldownTime = 4000; // Grade C
-        else cooldownTime = 6000; // Grade D
+        // Cooldown based on Trade Grade (Signal Quality + Execution)
+        if (tradeGrade.startsWith('A')) cooldownTime = 1000;
+        else if (tradeGrade.startsWith('B')) cooldownTime = 3000;
+        else if (tradeGrade.startsWith('C')) cooldownTime = 6000;
+        else cooldownTime = 10000; // D or F
+
+        // EQS Adjustment
+        if (eqs < 50) cooldownTime += 2000;
 
         if (!isWin) {
             // Loss Penalty
-            cooldownTime *= 2;
+            cooldownTime = Math.max(cooldownTime * 1.5, 5000);
 
             // Drawdown Velocity Tracking
             this.drawdownVelocity.push(Date.now());
@@ -1041,12 +1036,12 @@ class TradingBot {
         }
 
         // Grading & Learning
-        const grade = this.gradeTrade(isWin, this.currentTradeReasoning);
-        const cleanGrade = grade.replace('+', '').replace('-', '');
+        // Re-use tradeGrade calculated above
+        const cleanGrade = tradeGrade.replace('+', '').replace('-', '');
         if (this.gradeStats[cleanGrade] !== undefined) this.gradeStats[cleanGrade]++;
         this.gradeStats.Total++;
 
-        this.updateGradeDrift(grade);
+        this.updateGradeDrift(tradeGrade);
 
         if (symbol === this.currentSymbol) {
             let label = -1;
@@ -1056,7 +1051,7 @@ class TradingBot {
             if (isCall) label = isWin ? 1 : 0;
             else label = isWin ? 0 : 1;
 
-            if (grade.startsWith('A') || grade === 'B') {
+            if (tradeGrade.startsWith('A') || tradeGrade === 'B') {
                 const startTime = contract.date_start;
                 const candleIdx = this.candles1m.findIndex(c => Math.abs(c.time - startTime) < 60);
                 if (candleIdx !== -1) {
@@ -1064,7 +1059,7 @@ class TradingBot {
                     const seq = this.extractSequence(candleIdx - 1, 10);
                     if (seq && this.aiFilter.addSample) {
                         this.aiFilter.addSample(seq, label);
-                        this.log(`AI Memory Updated with Grade ${grade} Trade (Label: ${label}).`);
+                        this.log(`AI Memory Updated with Grade ${tradeGrade} Trade (Label: ${label}).`);
                     }
                 }
             }
@@ -1086,7 +1081,24 @@ class TradingBot {
         this.updateLearning(isWin);
         if (this.optimizer) this.optimizer.onTrade(isWin, this.marketCondition);
 
-        this.log(`Trade Finished. Profit: $${profit.toFixed(2)} (Grade: ${grade})`);
+        this.log(`Trade Finished. Profit: $${profit.toFixed(2)} (Grade: ${tradeGrade})`);
+
+        // Fingerprint Update
+        const type = contract.contract_type ? contract.contract_type.toUpperCase() : '';
+        const dir = type.includes('CALL') || type.includes('RISE') ? 'rise' : 'fall';
+        const fpKey = this.getSignalFingerprint(dir);
+
+        if (!isWin) {
+            const mem = this.fingerprintMemory.get(fpKey) || { losses: 0, banUntil: 0 };
+            mem.losses++;
+            if (mem.losses >= 2) {
+                mem.banUntil = Date.now() + (mem.losses * 60000); // Ban for N minutes
+                this.log(`Fingerprint [${fpKey}] penalized. Banned for ${mem.losses} min.`);
+            }
+            this.fingerprintMemory.set(fpKey, mem);
+        } else {
+            this.fingerprintMemory.delete(fpKey); // Clear penalty on win
+        }
 
         this.tradeHistory.push({
             time: new Date().toLocaleTimeString(),
@@ -1095,7 +1107,7 @@ class TradingBot {
             stake: contract.buy_price,
             profit: profit,
             status: isWin ? 'WIN' : 'LOSS',
-            grade: grade,
+            grade: tradeGrade,
             reasoning: this.currentTradeReasoning
         });
 
@@ -1134,13 +1146,57 @@ class TradingBot {
     checkIntegrity() {
         // State Integrity Watchdog
         // Checks if bot is stuck in a transient state for too long
-        if (this.tradeState === 'ORDER_SENT' || this.tradeState === 'IN_TRADE') {
-            const stuckTime = Date.now() - this.lastTradeTime;
-            if (stuckTime > 120000) { // 2 minutes stuck
-                this.log('CRITICAL: Bot Stuck in Active State > 2m. Force Reset.');
-                this.resetState();
-            }
+        const stuckTime = Date.now() - this.lastTradeTime;
+
+        if ((this.tradeState === 'ORDER_SENT' && stuckTime > 30000) ||
+            (this.tradeState === 'IN_TRADE' && stuckTime > 300000)) { // 30s for Order, 5m for Trade
+            this.log(`CRITICAL: Bot Stuck in ${this.tradeState} > ${stuckTime/1000}s. Force Reset.`);
+            this.resetState();
         }
+
+        // Prevent overlapping trades if API reports pending but state is IDLE (rare desync)
+        if (this.tradeState === 'IDLE' && this.api.pendingTrade) {
+             this.log('Integrity Fix: API pending but State IDLE. Resetting API flag.');
+             this.api.pendingTrade = false;
+        }
+    }
+
+    canExecuteTrade(direction, symbol, confidence) {
+        // 1. Latency & System Health
+        if (this.api.latency > 700) {
+            this.log(`Execution blocked: Critical Latency (${this.api.latency}ms).`);
+            return false;
+        }
+
+        // 2. Cooldown
+        if (this.tradeState !== 'SIGNAL_CONFIRMED' && this.tradeState !== 'IDLE') return false;
+        if (Date.now() < this.cooldownEndTime) return false;
+
+        // 3. Market Regime & Risk
+        if (this.riskState === 'WAIT') return false;
+        if (this.riskState === 'PROTECT' && confidence < 90) return false;
+
+        // 4. Repeated Signal Check (Signal Quality)
+        if (confidence <= this.lastTradeConfidence && confidence < 95) {
+             // Allow if confidence improved significantly or is very high
+             return false;
+        }
+
+        // 5. Fingerprint Ban Check
+        const fp = this.getSignalFingerprint(direction);
+        const mem = this.fingerprintMemory.get(fp);
+        if (mem && mem.banUntil > Date.now()) {
+            this.log(`Execution blocked: Signal Fingerprint Banned until ${new Date(mem.banUntil).toLocaleTimeString()}`);
+            return false;
+        }
+
+        // 6. Volatility Filter (if enabled)
+        if (this.useFilter && this.currentEntropy > 1.5 && this.marketCondition !== 'Volatile') {
+             // Too chaotic unless we know it's volatile
+             return false;
+        }
+
+        return true;
     }
 
     triggerCircuitBreaker(reason) {
@@ -1336,8 +1392,14 @@ class TradingBot {
         // High confidence loss = heavy penalty
         // Low latency win = high reward
         let weight = 1;
-        if (!isWin && this.confidence > 90) weight = 2; // Penalize failed sure-bets
-        if (isWin && this.api.latency < 250) weight = 1.5; // Reward fast execution
+        if (!isWin) {
+            if (this.confidence > 90) weight = 2.5; // Heavy penalty for "sure thing" failures
+            else if (this.confidence > 80) weight = 1.5;
+        } else {
+            if (this.api.latency < 250) weight = 1.5; // Reward fast execution
+            const grade = this.gradeTrade(isWin, this.currentTradeReasoning);
+            if (grade.startsWith('A')) weight *= 1.2; // Bonus for high quality
+        }
 
         // Log Details
         if (this.currentTradeReasoning) {
@@ -1400,16 +1462,41 @@ class TradingBot {
         if (!isWin) {
             // Escalation on loss
             const increase = 3 * weight;
-            this.requiredConfidence = Math.min(95, this.requiredConfidence + increase);
-            this.log(`Loss detected (W:${weight}). Confidence req +${increase}% -> ${this.requiredConfidence.toFixed(1)}%`);
+            // Update params directly as requiredConfidence isn't standard in this class yet
+            this.params.confidenceThreshold = Math.min(0.98, this.params.confidenceThreshold + (increase/100));
+            this.log(`Loss detected (W:${weight}). Confidence Threshold +${increase}% -> ${(this.params.confidenceThreshold*100).toFixed(1)}%`);
         } else {
             // Decay
-            let base = 60;
-            if (this.marketCondition === 'Volatile') base = 80;
-            if (this.riskState === 'PROTECT') base = 85;
+            let base = 0.60;
+            if (this.marketCondition === 'Volatile') base = 0.80;
+            if (this.riskState === 'PROTECT') base = 0.85;
 
-            this.requiredConfidence = Math.max(base, this.requiredConfidence - 1);
+            this.params.confidenceThreshold = Math.max(base, this.params.confidenceThreshold - 0.01);
         }
+    }
+
+    getSignalFingerprint(direction) {
+        // Generate a unique signature for the market state
+        // [Direction, TrendState, RSIBinned, VolatilityBinned]
+        const rsi = this.currentTradeReasoning?.rsi || 50;
+        const rsiBin = Math.floor(rsi / 10) * 10;
+        const volBin = this.marketCondition;
+        return `${direction}|${this.marketCondition}|${rsiBin}`;
+    }
+
+    updateFingerprintMemory(isWin) {
+        if (!this.lastSignal) return; // Need direction
+        const fp = this.getSignalFingerprint(this.lastSignal); // Approximation if lastSignal stored
+        // Note: Ideally store fingerprint with trade. For now regenerate or use last state.
+        // Better: Use tradeHistory reasoning.
+
+        const lastTrade = this.tradeHistory[this.tradeHistory.length - 1];
+        if (!lastTrade || !lastTrade.reasoning) return;
+
+        // Reconstruct fingerprint from reasoning if possible, or simple state
+        // Let's rely on simple state for now as 'lastSignal' might be stale.
+        // Actually, let's skip if we can't reliably get the exact fingerprint of the *trade*.
+        // Future improvement: Store fingerprint in tradeHistory.
     }
     log(message) {
         const logContainer = document.getElementById('bot-logs');

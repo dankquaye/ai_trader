@@ -208,7 +208,15 @@ async function runBacktest() {
 
 // --- Dashboard & Updates ---
 
+// Throttle UI updates to ~10fps
+let lastUIUpdate = 0;
+const UI_THROTTLE_MS = 100;
+
 setInterval(() => {
+    const now = Date.now();
+    if (now - lastUIUpdate < UI_THROTTLE_MS) return;
+    lastUIUpdate = now;
+
     if (bot && bot.isRunning) {
         // UI Updates
         if (ui.marketCondition) {
