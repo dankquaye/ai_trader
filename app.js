@@ -835,14 +835,14 @@ function setupEventListeners() {
     });
 
     // Account & Token
-    // Account & Token (Removed manual token input listener)
-    /*
     ui.tokenInput.addEventListener('change', () => {
-        api.setToken(ui.tokenInput.value);
-        if (api.isConnected) api.authorize();
-        else api.connect();
+        const token = ui.tokenInput.value.trim();
+        if (token) {
+             api.setToken(token);
+             if (api.isConnected) api.authorize();
+             else api.connect();
+        }
     });
-    */
 
     ui.accountSelector.addEventListener('change', () => {
         api.setAccountType(ui.accountSelector.value);

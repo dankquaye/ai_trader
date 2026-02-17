@@ -25,16 +25,14 @@ class DerivAPI {
         };
 
         // Credentials
-        // NOTE: Tokens should be provided by the user via UI or Environment Variables.
-        // Hardcoded tokens removed for security.
         this.credentials = {
             demo: {
                 appId: 71238,
-                token: 'a8o3x9Wzjsssk1Q' // User provided
+                token: localStorage.getItem('deriv_token_demo') || null
             },
             live: {
                 appId: 71236,
-                token: 'eBcvBVOLY6iZWCl' // User provided
+                token: localStorage.getItem('deriv_token_live') || null
             }
         };
 
@@ -44,6 +42,7 @@ class DerivAPI {
     setToken(token) {
         if (this.credentials[this.accountType]) {
             this.credentials[this.accountType].token = token;
+            localStorage.setItem(`deriv_token_${this.accountType}`, token);
         }
     }
 
