@@ -71,11 +71,11 @@ const ui = {
     eqsStatus: document.getElementById('eqs-status'),
     watchdogStatus: document.getElementById('watchdog-status'),
     gradeStats: {
-        a: document.getElementById('grade-a'),
-        b: document.getElementById('grade-b'),
-        c: document.getElementById('grade-c'),
-        d: document.getElementById('grade-d'),
-        f: document.getElementById('grade-f')
+        a: document.getElementById('grade-a') || null,
+        b: document.getElementById('grade-b') || null,
+        c: document.getElementById('grade-c') || null,
+        d: document.getElementById('grade-d') || null,
+        f: document.getElementById('grade-f') || null
     },
     recoveryBadge: document.getElementById('recovery-badge'),
     backtest: {
