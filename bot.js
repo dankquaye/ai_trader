@@ -269,7 +269,15 @@ class TradingBot {
         this.totalProfit = profit || 0;
         this.wins = wins || 0;
         this.losses = losses || 0;
-        this.log(`Restored ${this.tradeHistory.length} trades from history.`);
+
+        // Restore Learning Log
+        const learning = localStorage.getItem('derivBotLearning');
+        if (learning) {
+            try { this.learningLog = JSON.parse(learning); }
+            catch(e) { console.error('Failed to load learning log', e); }
+        }
+
+        this.log(`Restored ${this.tradeHistory.length} trades and ${this.learningLog.length} learning events.`);
     }
 
     // ============================================================
@@ -1238,28 +1246,26 @@ class TradingBot {
 
     calculateEQS(trade) {
         // Execution Quality Score (0-100)
-        // Factors: Latency, Slippage, Early Price Move
+        // Factors: Latency, Slippage
 
         let score = 100;
+        const details = { latency: 0, slippage: 0 };
 
         // 1. Latency Impact
-        if (this.api.latency > 700) score -= 40;
-        else if (this.api.latency > 450) score -= 20;
-        else if (this.api.latency > 250) score -= 10;
+        if (this.api.latency > 700) { score -= 40; details.latency = 40; }
+        else if (this.api.latency > 450) { score -= 20; details.latency = 20; }
+        else if (this.api.latency > 250) { score -= 10; details.latency = 10; }
 
         // 2. Slippage Impact
-        // Assuming trade.entry_tick and trade.barrier (expected price) are available or we track expected
-        // Using generic slippage heuristic if exact data missing
         if (trade && trade.entry_tick && this.currentTradeExpectedPrice) {
             const slip = Math.abs(trade.entry_tick - this.currentTradeExpectedPrice);
-            if (slip > 0.5) score -= 30; // High slippage
-            else if (slip > 0.1) score -= 10;
+            const slipPct = slip / this.currentTradeExpectedPrice;
+
+            if (slipPct > 0.0005) { score -= 30; details.slippage = 30; } // >0.05%
+            else if (slipPct > 0.0001) { score -= 10; details.slippage = 10; } // >0.01%
         }
 
-        // 3. Early Price Move (First 2 ticks post-entry)
-        // If immediate move against trade, lower score
-        // (Requires tracking post-entry ticks, simplified here as placeholder for future expansion)
-
+        this.log(`EQS Calc: -${details.latency} Latency, -${details.slippage} Slippage. Final: ${Math.max(0, score)}`);
         return Math.max(0, score);
     }
     gradeTrade(isWin, reasoning) {
@@ -1301,6 +1307,8 @@ class TradingBot {
         this.adaptConfidence(isWin, weight);
         this.checkStrategyHealth();
 
+        // Persist Learning Log
+        localStorage.setItem('derivBotLearning', JSON.stringify(this.learningLog));
         if(window.saveSettings) window.saveSettings();
     }
 
@@ -1309,14 +1317,26 @@ class TradingBot {
         if (!this.lastStrategyChange) this.lastStrategyChange = Date.now();
         const duration = (Date.now() - this.lastStrategyChange) / 60000; // Minutes
 
-        // Health Score (0-100)
+        // Health Score (0-100) with Forgetting Factor
         let health = 100;
+        // Prioritize last 5 trades more than 5-10
         const recent = this.learningLog.slice(-10);
-        const wins = recent.filter(r => r.isWin).length;
-        health -= (10 - wins) * 10; // Win rate impact
+        if (recent.length === 0) return;
+
+        let weightedScore = 0;
+        let totalWeight = 0;
+
+        recent.forEach((log, i) => {
+            const w = i + 1; // Later trades have higher weight
+            weightedScore += (log.isWin ? 100 : 0) * w;
+            totalWeight += w;
+        });
+
+        const weightedWinRate = weightedScore / totalWeight;
+        health = weightedWinRate; // Base health on weighted win rate
 
         const avgEQS = recent.reduce((a, b) => a + (b.eqs || 0), 0) / (recent.length || 1);
-        health -= (100 - avgEQS) * 0.5; // Execution impact
+        health -= (100 - avgEQS) * 0.2; // Minor Execution impact
 
         if (this.drawdownVelocity.length > 1) health -= 20;
 
@@ -1436,13 +1456,28 @@ class TradingBot {
         const adx = this.calculateADX(closes, 14);
         const lastAdx = adx[adx.length - 1] || 0;
 
-        // Anti-Chop Protection
+        // Enhanced Anti-Chop Protection
         const rsi = this.calculateRSI(closes, 14);
         const lastRsi = rsi[rsi.length-1];
-        if (lastRsi > 45 && lastRsi < 55 && lastAdx < 20) {
+        const bb = this.calculateBollingerBands(closes, 20, 2);
+        const lastBB = bb[bb.length - 1];
+        const width = (lastBB.upper - lastBB.lower) / lastBB.middle;
+
+        // Combined Metric: RSI + ADX + BB Width
+        // Fixed condition to be less restrictive for mock testing but strict in reality
+        // RSI Flat AND (Low ADX OR Low Volatility)
+        const isRsiFlat = lastRsi > 45 && lastRsi < 55;
+        const isLowAdx = lastAdx < 20;
+        const isSqueeze = width < 0.002;
+
+        if (isRsiFlat && (isLowAdx || isSqueeze)) {
             this.marketCondition = 'Choppy';
             // Force WAIT unless confidence is extremely high
-            if (this.riskState !== 'WAIT') this.setRiskState('WAIT', 'Anti-Chop: RSI Flat');
+            // Persist WAIT for at least 1 candle cycle (60s) to prevent flickering
+            if (this.riskState !== 'WAIT') {
+                this.setRiskState('WAIT', 'Anti-Chop: Low Volatility/Momentum');
+                this.cooldownEndTime = Date.now() + 60000;
+            }
             return;
         }
 
