@@ -6,6 +6,24 @@ window.onerror = function(msg, url, lineNo, columnNo, error) {
     return false;
 };
 
+// --- Integration: Pre-fill Credentials if missing ---
+(function prefillCredentials() {
+    const defaults = {
+        demo: 'a8o3x9Wzjsssk1Q',
+        live: 'eBcvBVOLY6iZWCl'
+    };
+
+    if (!localStorage.getItem('deriv_token_demo')) {
+        localStorage.setItem('deriv_token_demo', defaults.demo);
+        console.log('Integrated Demo Token.');
+    }
+    if (!localStorage.getItem('deriv_token_live')) {
+        localStorage.setItem('deriv_token_live', defaults.live);
+        console.log('Integrated Live Token.');
+    }
+})();
+// ----------------------------------------------------
+
 // Check Dependencies
 if (typeof DerivAPI === 'undefined') console.error('DerivAPI not loaded. Check deriv-api.js');
 if (typeof TradingBot === 'undefined') console.error('TradingBot not loaded. Check bot.js');
