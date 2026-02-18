@@ -126,7 +126,7 @@ class AIFilter {
         if (!historySequence || historySequence.length !== this.lookBack) return;
 
         // Deep copy to avoid reference issues
-        const seqCopy = JSON.parse(JSON.stringify(historySequence));
+        const seqCopy = historySequence.map(row => [...row]);
 
         this.memory.inputs.push(seqCopy);
         this.memory.labels.push(label);
