@@ -32,18 +32,18 @@ def run(playwright):
     expect(page.get_by_role("button", name="Balanced AI")).to_be_visible()
     expect(page.get_by_role("button", name="Growth AI")).to_be_visible()
 
-    # 3. Check for New Features
-    print("Checking New Features...", flush=True)
+    # 3. Check for New Features Removal (Revert Check)
+    print("Checking Reversion...", flush=True)
 
-    # Check Notification Checkbox
-    print("Checking Notification Checkbox...", flush=True)
-    expect(page.locator("#enable-notifications")).to_be_visible()
+    # Check Notification Checkbox - Should NOT be visible or exist
+    print("Checking Notification Checkbox Absence...", flush=True)
+    expect(page.locator("#enable-notifications")).not_to_be_visible()
 
-    # Check Strategy Dropdown for 'Candlestick Patterns'
-    print("Checking Strategy Dropdown...", flush=True)
+    # Check Strategy Dropdown for 'Candlestick Patterns' - Should NOT be present
+    print("Checking Strategy Dropdown Absence...", flush=True)
     strategy_select = page.locator("#bot-strategy")
     expect(strategy_select).to_be_visible()
-    expect(strategy_select).to_contain_text("Candlestick Patterns")
+    expect(strategy_select).not_to_contain_text("Candlestick Patterns")
 
     # 4. Switch to "Test" (Backtest) tab
     print("Navigating to Backtest tab...", flush=True)
@@ -61,7 +61,7 @@ def run(playwright):
         os.makedirs("verification")
 
     print("Taking screenshot...", flush=True)
-    page.screenshot(path="verification/dashboard_v2.png")
+    page.screenshot(path="verification/dashboard_reverted.png")
     print("Screenshot taken.", flush=True)
 
     browser.close()
