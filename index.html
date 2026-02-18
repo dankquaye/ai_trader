@@ -20,6 +20,8 @@
             overflow-x: hidden;
             overflow-y: visible !important;
         }
+        .opacity-0 { opacity: 0; }
+        .pointer-events-none { pointer-events: none; }
     </style>
 </head>
 <body class="bg-gray-900 text-white font-sans h-screen flex flex-col overflow-hidden supports-[height:100dvh]:h-[100dvh]">
@@ -528,9 +530,9 @@
                 <!-- Title -->
                 <div class="flex justify-between items-center pb-3 border-b border-gray-700">
                     <p class="text-2xl font-bold">Trade Analysis</p>
-                    <div class="modal-close cursor-pointer z-50">
+                    <button type="button" class="modal-close cursor-pointer z-50 text-gray-400 hover:text-white transition-colors" aria-label="Close modal">
                         <i class="fa-solid fa-xmark text-xl"></i>
-                    </div>
+                    </button>
                 </div>
 
                 <!-- Body -->

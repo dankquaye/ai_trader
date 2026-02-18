@@ -834,6 +834,191 @@ function showToast(message, type = 'info') {
     }, 3000);
 }
 
+function setupEventListeners() {
+    // Navigation
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+             const target = btn.dataset.target;
+             if(!target) return;
+
+             ui.navBtns.forEach(b => {
+                 b.classList.remove('active');
+                 b.querySelector('span').classList.remove('text-blue-400');
+                 b.querySelector('i').classList.remove('text-blue-400');
+             });
+             btn.classList.add('active');
+             btn.querySelector('span').classList.add('text-blue-400');
+             btn.querySelector('i').classList.add('text-blue-400');
+
+             ui.pages.forEach(p => p.classList.add('hidden'));
+             const section = document.getElementById(target);
+             if(section) section.classList.remove('hidden');
+        });
+    });
+
+    // Connection
+    if(ui.tokenInput) {
+        ui.tokenInput.addEventListener('change', (e) => {
+            if(e.target.value) {
+                api.setToken(e.target.value);
+                api.connect();
+            }
+        });
+    }
+
+    if(ui.accountSelector) {
+        ui.accountSelector.addEventListener('change', (e) => {
+            api.setAccountType(e.target.value);
+        });
+    }
+
+    // Bot Controls
+    if(ui.btns.startBot) ui.btns.startBot.addEventListener('click', () => {
+        bot.start();
+        ui.btns.startBot.classList.add('hidden');
+        ui.btns.stopBot.classList.remove('hidden');
+        ui.btns.pauseBot.classList.remove('hidden');
+        updateWatchdogStatus('RUNNING');
+    });
+
+    if(ui.btns.stopBot) ui.btns.stopBot.addEventListener('click', () => {
+        bot.stop();
+        ui.btns.stopBot.classList.add('hidden');
+        ui.btns.pauseBot.classList.add('hidden');
+        ui.btns.startBot.classList.remove('hidden');
+        updateWatchdogStatus('STOPPED');
+    });
+
+    if(ui.btns.pauseBot) ui.btns.pauseBot.addEventListener('click', () => {
+        if(!bot.isRunning) return;
+        const isPaused = bot.togglePause();
+        const icon = ui.btns.pauseBot.querySelector('i');
+        if(isPaused) {
+            icon.classList.remove('fa-pause');
+            icon.classList.add('fa-play');
+            ui.btns.pauseBot.setAttribute('aria-label', 'Resume Bot');
+            ui.btns.pauseBot.classList.add('bg-green-600');
+            ui.btns.pauseBot.classList.remove('bg-yellow-600');
+        } else {
+            icon.classList.remove('fa-play');
+            icon.classList.add('fa-pause');
+            ui.btns.pauseBot.setAttribute('aria-label', 'Pause Bot');
+            ui.btns.pauseBot.classList.remove('bg-green-600');
+            ui.btns.pauseBot.classList.add('bg-yellow-600');
+        }
+    });
+
+    if(ui.btns.killSwitch) {
+        ui.btns.killSwitch.addEventListener('click', () => {
+            bot.stop();
+            api.disconnect();
+            showToast('EMERGENCY STOP ACTIVATED', 'error');
+            ui.btns.stopBot.click();
+        });
+    }
+
+    // Manual Trade
+    if(ui.btns.rise) ui.btns.rise.addEventListener('click', () => {
+        const stake = parseFloat(ui.inputs.stake.value);
+        const duration = parseInt(ui.inputs.duration.value);
+        api.placeTrade('rise', stake, duration, ui.assetSelector.value);
+    });
+
+    if(ui.btns.fall) ui.btns.fall.addEventListener('click', () => {
+        const stake = parseFloat(ui.inputs.stake.value);
+        const duration = parseInt(ui.inputs.duration.value);
+        api.placeTrade('fall', stake, duration, ui.assetSelector.value);
+    });
+
+    // Modal
+    ui.modal.closes.forEach(btn => {
+        btn.addEventListener('click', closeModal);
+    });
+
+    if(ui.modal.el) {
+        ui.modal.el.addEventListener('click', (e) => {
+             if(e.target.classList.contains('modal-overlay')) closeModal();
+        });
+
+        // Escape key to close
+        document.addEventListener('keydown', (e) => {
+            if(e.key === 'Escape' && !ui.modal.el.classList.contains('hidden')) {
+                closeModal();
+            }
+        });
+    }
+
+    // Settings
+    if(ui.botSettings.autoSelect) {
+        ui.botSettings.autoSelect.addEventListener('change', (e) => {
+            if(e.target.checked) startAutoScanner();
+            else stopAutoScanner();
+            saveSettings();
+        });
+    }
+
+    // Presets
+    document.querySelectorAll('.btn-preset').forEach(btn => {
+        btn.addEventListener('click', () => {
+            applyPreset(btn.dataset.preset);
+        });
+    });
+
+    if(ui.btns.loadChallenge) {
+        ui.btns.loadChallenge.addEventListener('click', () => {
+             bot.setSmallAccountMode(true);
+             applyPreset('growth'); // Use growth for small account
+             ui.inputs.stake.value = "0.35"; // Min stake
+             showToast('Small Account Challenge Mode Activated!', 'success');
+        });
+    }
+
+    if(ui.backtest.runBtn) {
+        ui.backtest.runBtn.addEventListener('click', runBacktest);
+    }
+
+    if(ui.btns.exportHistory) {
+         ui.btns.exportHistory.addEventListener('click', exportHistory);
+    }
+
+    if(ui.btns.sendSupport) {
+        ui.btns.sendSupport.addEventListener('click', () => {
+            showToast('Support request sent! We will contact you shortly.', 'success');
+        });
+    }
+
+    // Generic Input Save
+    const saveInputs = [
+        ui.inputs.stake, ui.inputs.duration, ui.assetSelector,
+        ui.botSettings.risk, ui.botSettings.strategy,
+        ui.botSettings.takeProfit, ui.botSettings.stopLoss,
+        ui.botSettings.martingaleMultiplier, ui.botSettings.adxThreshold
+    ];
+
+    saveInputs.forEach(input => {
+        if(input) input.addEventListener('change', saveSettings);
+    });
+
+    // Toggle Checkboxes
+    const toggleInputs = [
+        ui.botSettings.useMartingale, ui.botSettings.useSmartRisk,
+        ui.botSettings.useFilter, ui.botSettings.avoidSqueeze,
+        ui.botSettings.useAIFilter, ui.botSettings.lockParams
+    ];
+
+    toggleInputs.forEach(input => {
+        if(input) input.addEventListener('change', saveSettings);
+    });
+
+    if(ui.botSettings.strategy) {
+        ui.botSettings.strategy.addEventListener('change', (e) => {
+             renderStrategyParams(e.target.value);
+             bot.strategy = e.target.value;
+             saveSettings();
+        });
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     try {
         initChart();
