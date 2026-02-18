@@ -240,3 +240,4 @@ class Backtester {
         this.results.maxDrawdown = maxDrawdown;
     }
 }
+window.Backtester = Backtester;

@@ -803,6 +803,167 @@ function setupApiCallbacks() {
     api.on('error', (error) => showToast(`Error: ${error.message}`, 'error'));
 }
 
+function setupEventListeners() {
+    // Navigation
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            ui.navBtns.forEach(b => b.classList.remove('active', 'text-blue-500'));
+            btn.classList.add('active', 'text-blue-500');
+
+            ui.pages.forEach(p => p.classList.add('hidden'));
+            const targetId = btn.dataset.target;
+            document.getElementById(targetId).classList.remove('hidden');
+        });
+    });
+
+    // Account
+    ui.accountSelector.addEventListener('change', () => {
+        const type = ui.accountSelector.value;
+        if(window.api) window.api.setAccountType(type);
+        if(window.bot) window.bot.setAccountType(type);
+    });
+
+    ui.tokenInput.addEventListener('change', () => {
+        const token = ui.tokenInput.value;
+        if(token && window.api) {
+            window.api.setToken(token);
+            window.api.connect();
+        }
+    });
+
+    // Asset
+    ui.assetSelector.addEventListener('change', () => {
+        const symbol = ui.assetSelector.value;
+        if(window.bot) window.bot.setSymbol(symbol);
+        if(window.api) {
+             window.api.subscribeTicks(symbol);
+             window.api.subscribeCandles(symbol, 60);
+             window.api.getHistory(symbol);
+        }
+    });
+
+    // Manual Trade
+    ui.btns.rise.addEventListener('click', () => {
+        if(window.api && ui.inputs.stake && ui.inputs.duration) {
+            const stake = parseFloat(ui.inputs.stake.value);
+            const duration = parseInt(ui.inputs.duration.value);
+            window.api.placeTrade('rise', stake, duration, ui.assetSelector.value);
+        }
+    });
+
+    ui.btns.fall.addEventListener('click', () => {
+        if(window.api && ui.inputs.stake && ui.inputs.duration) {
+            const stake = parseFloat(ui.inputs.stake.value);
+            const duration = parseInt(ui.inputs.duration.value);
+            window.api.placeTrade('fall', stake, duration, ui.assetSelector.value);
+        }
+    });
+
+    // Bot Controls
+    ui.btns.startBot.addEventListener('click', () => {
+        if(window.bot) {
+            window.bot.start();
+            ui.btns.startBot.classList.add('hidden');
+            ui.btns.stopBot.classList.remove('hidden');
+            ui.btns.pauseBot.classList.remove('hidden');
+        }
+    });
+
+    ui.btns.stopBot.addEventListener('click', () => {
+        if(window.bot) {
+            window.bot.stop();
+            ui.btns.stopBot.classList.add('hidden');
+            ui.btns.startBot.classList.remove('hidden');
+            ui.btns.pauseBot.classList.add('hidden');
+        }
+    });
+
+    ui.btns.pauseBot.addEventListener('click', () => {
+        if(window.bot) {
+            const isPaused = window.bot.togglePause();
+            ui.btns.pauseBot.innerHTML = isPaused ? '<i class="fa-solid fa-play"></i>' : '<i class="fa-solid fa-pause"></i>';
+            ui.btns.pauseBot.classList.toggle('bg-yellow-600');
+            ui.btns.pauseBot.classList.toggle('bg-green-600');
+        }
+    });
+
+    ui.btns.killSwitch.addEventListener('click', () => {
+        if(window.bot) {
+            window.bot.stop();
+            window.bot.api.unsubscribeAll();
+            showToast('KILL SWITCH ACTIVATED', 'error');
+            ui.btns.stopBot.click();
+        }
+    });
+
+    // Backtest
+    ui.backtest.runBtn.addEventListener('click', runBacktest);
+
+    // Presets
+    document.querySelectorAll('.btn-preset').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const preset = btn.dataset.preset;
+            applyPreset(preset);
+        });
+    });
+
+    if(ui.btns.loadChallenge) {
+        ui.btns.loadChallenge.addEventListener('click', () => {
+             ui.inputs.stake.value = "1.00";
+             ui.botSettings.risk.value = "high";
+             ui.botSettings.strategy.value = "ultra_instinct";
+             bot.setSmallAccountMode(true);
+             showToast('Small Account Challenge Preset Loaded', 'success');
+             saveSettings();
+        });
+    }
+
+    // Export
+    ui.btns.exportHistory.addEventListener('click', exportHistory);
+
+    // Support
+    ui.btns.sendSupport.addEventListener('click', () => {
+        showToast('Message sent! Support will contact you shortly.', 'success');
+    });
+
+    // Settings Inputs
+    const settingInputs = [
+        ui.botSettings.strategy, ui.botSettings.risk, ui.botSettings.useMartingale,
+        ui.botSettings.useSmartRisk, ui.botSettings.martingaleMultiplier,
+        ui.botSettings.takeProfit, ui.botSettings.stopLoss,
+        ui.botSettings.useFilter, ui.botSettings.adxThreshold,
+        ui.botSettings.avoidSqueeze, ui.botSettings.autoSelect,
+        ui.botSettings.useAIFilter, ui.botSettings.lockParams,
+        ui.inputs.stake, ui.inputs.duration
+    ];
+
+    settingInputs.forEach(input => {
+        if(input) {
+            input.addEventListener('change', () => {
+                if(input === ui.botSettings.strategy) renderStrategyParams(input.value);
+                if(input === ui.botSettings.autoSelect) {
+                    if(input.checked) startAutoScanner(); else stopAutoScanner();
+                }
+                if(input === ui.botSettings.useAIFilter && window.bot) {
+                    window.bot.setAIFilter(input.checked);
+                }
+                saveSettings();
+                if(window.bot && !window.bot.isRunning) {
+                     window.bot.updateConfig(ui.botSettings.strategy.value, ui.botSettings.risk.value);
+                     window.bot.setStake(parseFloat(ui.inputs.stake.value));
+                     window.bot.setDuration(parseInt(ui.inputs.duration.value));
+                }
+            });
+        }
+    });
+
+    // Modals
+    ui.modal.closes.forEach(btn => btn.addEventListener('click', closeModal));
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeModal();
+    });
+}
+
 const activeToasts = [];
 function showToast(message, type = 'info') {
     if (activeToasts.length > 3) {
