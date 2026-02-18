@@ -1004,7 +1004,21 @@ document.addEventListener('DOMContentLoaded', () => {
         setupEventListeners();
         setupApiCallbacks();
         loadSettings();
-        showToast('Please enter your API Token to connect.', 'info');
+
+        // Check for pre-loaded config
+        if (typeof window.DerivConfig !== 'undefined') {
+            const type = ui.accountSelector.value || 'demo';
+            if (window.DerivConfig[type] && window.DerivConfig[type].token) {
+                console.log('Using pre-loaded configuration for ' + type);
+                api.authorize(window.DerivConfig[type].token);
+            } else {
+                ui.tokenInput.classList.remove('hidden');
+                showToast('Please enter your API Token to connect.', 'info');
+            }
+        } else {
+            ui.tokenInput.classList.remove('hidden');
+            showToast('Please enter your API Token to connect.', 'info');
+        }
     } catch (e) {
         console.error('Init Error:', e);
         showToast('Initialization Error: ' + e.message, 'error');

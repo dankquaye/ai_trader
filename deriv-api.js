@@ -36,6 +36,18 @@ class DerivAPI {
             }
         };
 
+        // Load config from window.DerivConfig if available
+        if (typeof window.DerivConfig !== 'undefined') {
+            if (window.DerivConfig.demo) {
+                this.credentials.demo.appId = window.DerivConfig.demo.appId || this.credentials.demo.appId;
+                this.credentials.demo.token = window.DerivConfig.demo.token;
+            }
+            if (window.DerivConfig.live) {
+                this.credentials.live.appId = window.DerivConfig.live.appId || this.credentials.live.appId;
+                this.credentials.live.token = window.DerivConfig.live.token;
+            }
+        }
+
         this.accountType = 'demo';
     }
 

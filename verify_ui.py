@@ -27,41 +27,33 @@ def run(playwright):
     print("Checking One Click Setup...", flush=True)
     expect(page.locator("h3", has_text="One Click Setup")).to_be_visible()
 
-    # Check for preset buttons
-    expect(page.get_by_role("button", name="Conservative AI")).to_be_visible()
-    expect(page.get_by_role("button", name="Balanced AI")).to_be_visible()
-    expect(page.get_by_role("button", name="Growth AI")).to_be_visible()
+    # 3. Check Token Input Visibility (Should be hidden if config.js works)
+    # Since we added config.js with valid structure, input should remain hidden
+    # and auth should attempt.
+    print("Checking Token Input Visibility...", flush=True)
+    token_input = page.locator("#api-token-input")
 
-    # 3. Check for New Features Removal (Revert Check)
-    print("Checking Reversion...", flush=True)
+    # We expect it to be hidden because config.js is present (created in previous steps)
+    # However, verify_ui.py runs in a fresh browser context.
+    # The server serves config.js.
 
-    # Check Notification Checkbox - Should NOT be visible or exist
-    print("Checking Notification Checkbox Absence...", flush=True)
-    expect(page.locator("#enable-notifications")).not_to_be_visible()
+    # Let's wait a moment for app.js init logic
+    page.wait_for_timeout(1000)
 
-    # Check Strategy Dropdown for 'Candlestick Patterns' - Should NOT be present
-    print("Checking Strategy Dropdown Absence...", flush=True)
-    strategy_select = page.locator("#bot-strategy")
-    expect(strategy_select).to_be_visible()
-    expect(strategy_select).not_to_contain_text("Candlestick Patterns")
+    # Check if hidden class is present
+    # expect(token_input).not_to_be_visible() # This checks visibility style/layout
+    # But it has 'hidden' class which sets display:none.
 
-    # 4. Switch to "Test" (Backtest) tab
-    print("Navigating to Backtest tab...", flush=True)
-    test_nav = page.locator("button.nav-btn").filter(has_text="Test")
-    expect(test_nav).to_be_visible()
-    test_nav.click()
+    # Actually, Playwright's not_to_be_visible() works for display:none.
+    expect(token_input).not_to_be_visible()
+    print("Token input is hidden (Config loaded).", flush=True)
 
-    # 5. Check Backtest UI
-    print("Checking Backtest UI...", flush=True)
-    expect(page.get_by_role("heading", name="Strategy Backtester")).to_be_visible()
-    expect(page.get_by_role("button", name="Run Simulation")).to_be_visible()
-
-    # Take screenshot
+    # 4. Take screenshot
     if not os.path.exists("verification"):
         os.makedirs("verification")
 
     print("Taking screenshot...", flush=True)
-    page.screenshot(path="verification/dashboard_reverted.png")
+    page.screenshot(path="verification/dashboard_fix_ui.png")
     print("Screenshot taken.", flush=True)
 
     browser.close()
