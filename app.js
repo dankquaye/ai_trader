@@ -666,12 +666,18 @@ function openModal(tradeId) {
 
     ui.modal.body.innerHTML = html;
     document.body.classList.add('modal-active');
+    ui.modal.el.classList.remove('invisible');
+    // Force reflow
+    void ui.modal.el.offsetWidth;
     ui.modal.el.classList.remove('opacity-0', 'pointer-events-none');
 }
 
 function closeModal() {
     document.body.classList.remove('modal-active');
     ui.modal.el.classList.add('opacity-0', 'pointer-events-none');
+    setTimeout(() => {
+        ui.modal.el.classList.add('invisible');
+    }, 300);
 }
 
 window.updateTradeHistory = (history, totalProfit, wins, losses) => {
@@ -715,6 +721,110 @@ function aggregateTick(time, price) {
 }
 
 // --- API Events ---
+
+function setupEventListeners() {
+    // Navigation
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const targetId = btn.dataset.target;
+            ui.navBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            ui.pages.forEach(page => {
+                if (page.id === targetId) {
+                    page.classList.remove('hidden');
+                } else {
+                    page.classList.add('hidden');
+                }
+            });
+        });
+    });
+
+    // Modal Close
+    ui.modal.closes.forEach(btn => {
+        btn.addEventListener('click', closeModal);
+    });
+
+    // Close modal on overlay click
+    ui.modal.el.addEventListener('click', (e) => {
+        if (e.target === ui.modal.el || e.target.classList.contains('modal-overlay')) {
+            closeModal();
+        }
+    });
+
+    // Close on Escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && document.body.classList.contains('modal-active')) {
+            closeModal();
+        }
+    });
+
+    // Bot Controls
+    if (ui.btns.startBot) ui.btns.startBot.addEventListener('click', () => bot.start());
+    if (ui.btns.stopBot) ui.btns.stopBot.addEventListener('click', () => bot.stop());
+    if (ui.btns.pauseBot) ui.btns.pauseBot.addEventListener('click', () => {
+        bot.togglePause();
+        // Update button visual
+        const icon = ui.btns.pauseBot.querySelector('i');
+        if (bot.isPaused) {
+            ui.btns.pauseBot.classList.replace('bg-yellow-600', 'bg-green-600');
+            ui.btns.pauseBot.classList.replace('hover:bg-yellow-500', 'hover:bg-green-500');
+            icon.classList.replace('fa-pause', 'fa-play');
+            ui.btns.pauseBot.setAttribute('aria-label', 'Resume Bot');
+        } else {
+            ui.btns.pauseBot.classList.replace('bg-green-600', 'bg-yellow-600');
+            ui.btns.pauseBot.classList.replace('hover:bg-green-500', 'hover:bg-yellow-500');
+            icon.classList.replace('fa-play', 'fa-pause');
+            ui.btns.pauseBot.setAttribute('aria-label', 'Pause Bot');
+        }
+    });
+
+    // Kill Switch
+    if (ui.btns.killSwitch) ui.btns.killSwitch.addEventListener('click', () => {
+        bot.stop();
+        showToast('KILL SWITCH ACTIVATED', 'error');
+    });
+
+    // Other buttons
+    if (ui.btns.exportHistory) ui.btns.exportHistory.addEventListener('click', exportHistory);
+    if (ui.btns.sendSupport) ui.btns.sendSupport.addEventListener('click', () => showToast('Support message sent!', 'success'));
+    if (ui.btns.loadChallenge) ui.btns.loadChallenge.addEventListener('click', () => applyPreset('conservative'));
+
+    // Presets
+    document.querySelectorAll('.btn-preset').forEach(btn => {
+        btn.addEventListener('click', () => applyPreset(btn.dataset.preset));
+    });
+
+    // Inputs
+    if (ui.accountSelector) ui.accountSelector.addEventListener('change', () => {
+        if (bot.accountType !== ui.accountSelector.value) {
+            bot.setAccountType(ui.accountSelector.value);
+            showToast(`Switched to ${bot.accountType.toUpperCase()} account`);
+        }
+    });
+
+    if (ui.tokenInput) ui.tokenInput.addEventListener('change', () => {
+        const token = ui.tokenInput.value;
+        if (token) {
+            api.authorize(token);
+        }
+    });
+
+    // Manual Trade Buttons
+    if (ui.btns.rise) ui.btns.rise.addEventListener('click', () => {
+        const stake = parseFloat(ui.inputs.stake.value);
+        const duration = parseInt(ui.inputs.duration.value);
+        api.buy(ui.assetSelector.value, stake, duration, 'CALL');
+    });
+
+    if (ui.btns.fall) ui.btns.fall.addEventListener('click', () => {
+        const stake = parseFloat(ui.inputs.stake.value);
+        const duration = parseInt(ui.inputs.duration.value);
+        api.buy(ui.assetSelector.value, stake, duration, 'PUT');
+    });
+
+    // Backtest
+    if (ui.backtest.runBtn) ui.backtest.runBtn.addEventListener('click', runBacktest);
+}
 
 function setupApiCallbacks() {
     api.on('authorize', (data) => {
