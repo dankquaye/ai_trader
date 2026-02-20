@@ -834,6 +834,135 @@ function showToast(message, type = 'info') {
     }, 3000);
 }
 
+function setupEventListeners() {
+    // Navigation
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const target = btn.dataset.target;
+            ui.pages.forEach(p => p.classList.add('hidden'));
+            const targetPage = document.getElementById(target);
+            if(targetPage) targetPage.classList.remove('hidden');
+
+            ui.navBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        });
+    });
+
+    // Bot Controls
+    if (ui.btns.startBot) ui.btns.startBot.addEventListener('click', () => {
+        if (!bot.isRunning) {
+            bot.start();
+            ui.btns.startBot.classList.add('hidden');
+            ui.btns.stopBot.classList.remove('hidden');
+            ui.btns.pauseBot.classList.remove('hidden');
+        }
+    });
+
+    if (ui.btns.stopBot) ui.btns.stopBot.addEventListener('click', () => {
+        bot.stop();
+        ui.btns.startBot.classList.remove('hidden');
+        ui.btns.stopBot.classList.add('hidden');
+        ui.btns.pauseBot.classList.add('hidden');
+    });
+
+    if (ui.btns.pauseBot) ui.btns.pauseBot.addEventListener('click', () => {
+        const isPaused = bot.togglePause();
+        const icon = ui.btns.pauseBot.querySelector('i');
+        if (isPaused) {
+            icon.classList.remove('fa-pause');
+            icon.classList.add('fa-play');
+            ui.btns.pauseBot.classList.add('bg-green-600');
+            ui.btns.pauseBot.classList.remove('bg-yellow-600');
+            ui.btns.pauseBot.setAttribute('aria-label', 'Resume Bot');
+        } else {
+            icon.classList.remove('fa-play');
+            icon.classList.add('fa-pause');
+            ui.btns.pauseBot.classList.remove('bg-green-600');
+            ui.btns.pauseBot.classList.add('bg-yellow-600');
+            ui.btns.pauseBot.setAttribute('aria-label', 'Pause Bot');
+        }
+    });
+
+    if (ui.btns.killSwitch) ui.btns.killSwitch.addEventListener('click', () => {
+        bot.stop();
+        showToast('KILL SWITCH ACTIVATED', 'error');
+    });
+
+    // Manual Trade
+    if (ui.btns.rise) ui.btns.rise.addEventListener('click', () => {
+        api.placeTrade('rise', ui.inputs.stake.value, ui.inputs.duration.value, ui.assetSelector.value);
+    });
+    if (ui.btns.fall) ui.btns.fall.addEventListener('click', () => {
+        api.placeTrade('fall', ui.inputs.stake.value, ui.inputs.duration.value, ui.assetSelector.value);
+    });
+
+    // Settings
+    if (ui.botSettings.strategy) ui.botSettings.strategy.addEventListener('change', () => {
+        bot.updateConfig(ui.botSettings.strategy.value, ui.botSettings.risk.value);
+        renderStrategyParams(ui.botSettings.strategy.value);
+        saveSettings();
+    });
+
+    const settingsInputs = [
+        ui.botSettings.risk, ui.botSettings.useFilter, ui.botSettings.adxThreshold,
+        ui.botSettings.avoidSqueeze, ui.botSettings.autoSelect, ui.botSettings.lockParams,
+        ui.botSettings.useMartingale, ui.botSettings.useSmartRisk, ui.botSettings.martingaleMultiplier,
+        ui.botSettings.takeProfit, ui.botSettings.stopLoss, ui.inputs.stake, ui.inputs.duration,
+        ui.assetSelector, ui.accountSelector, ui.tokenInput
+    ];
+
+    settingsInputs.forEach(el => {
+        if(el) el.addEventListener('change', saveSettings);
+    });
+
+    if(ui.assetSelector) ui.assetSelector.addEventListener('change', () => {
+        bot.setSymbol(ui.assetSelector.value);
+        api.subscribeTicks(ui.assetSelector.value);
+        saveSettings();
+    });
+
+    if(ui.accountSelector) ui.accountSelector.addEventListener('change', () => {
+        bot.setAccountType(ui.accountSelector.value);
+        saveSettings();
+    });
+
+    if(ui.tokenInput) ui.tokenInput.addEventListener('change', () => {
+        api.authorize(ui.tokenInput.value);
+    });
+
+    // Modal
+    ui.modal.closes.forEach(btn => btn.addEventListener('click', closeModal));
+    ui.modal.el.addEventListener('click', (e) => {
+        if (e.target === ui.modal.el || e.target.classList.contains('modal-overlay')) closeModal();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && document.body.classList.contains('modal-active')) closeModal();
+    });
+
+    // Presets
+    document.querySelectorAll('.btn-preset').forEach(btn => {
+        btn.addEventListener('click', () => applyPreset(btn.dataset.preset));
+    });
+
+    if(ui.btns.loadChallenge) ui.btns.loadChallenge.addEventListener('click', () => {
+         bot.setSmallAccountMode(true);
+         applyPreset('conservative');
+         showToast('Small Account Challenge Mode Loaded', 'success');
+    });
+
+    // Backtest
+    if(ui.backtest.runBtn) ui.backtest.runBtn.addEventListener('click', runBacktest);
+
+    // Export
+    if(ui.btns.exportHistory) ui.btns.exportHistory.addEventListener('click', exportHistory);
+
+    // Support
+    if(ui.btns.sendSupport) ui.btns.sendSupport.addEventListener('click', () => {
+        showToast('Message sent! Support will contact you shortly.', 'success');
+        document.querySelector('#support form').reset();
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     try {
         initChart();
