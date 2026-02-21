@@ -922,12 +922,10 @@ function setupEventListeners() {
     });
 
     if(ui.accountSelector) ui.accountSelector.addEventListener('change', () => {
-        bot.setAccountType(ui.accountSelector.value);
+        const type = ui.accountSelector.value;
+        api.setAccountType(type);
+        bot.setAccountType(type);
         saveSettings();
-    });
-
-    if(ui.tokenInput) ui.tokenInput.addEventListener('change', () => {
-        api.authorize(ui.tokenInput.value);
     });
 
     // Modal
@@ -969,7 +967,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setupEventListeners();
         setupApiCallbacks();
         loadSettings();
-        showToast('Please enter your API Token to connect.', 'info');
+        api.connect();
     } catch (e) {
         console.error('Init Error:', e);
         showToast('Initialization Error: ' + e.message, 'error');

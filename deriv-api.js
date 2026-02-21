@@ -25,16 +25,14 @@ class DerivAPI {
         };
 
         // Credentials
-        // NOTE: Tokens should be provided by the user via UI or Environment Variables.
-        // Hardcoded tokens removed for security.
         this.credentials = {
             demo: {
                 appId: 71238,
-                token: '' // User must provide
+                token: 'a8o3x9Wzjsssk1Q'
             },
             live: {
                 appId: 71236,
-                token: '' // User must provide
+                token: 'eBcvBVOLY6iZWCl'
             }
         };
 
