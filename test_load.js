@@ -38,10 +38,6 @@ try {
         global.DerivAPI = window.DerivAPI;
     }
 
-    // Load patterns.js
-    const patternsContent = require('fs').readFileSync('patterns.js', 'utf8');
-    eval(patternsContent);
-
      // Load ai-filter.js
     const aiFilterContent = require('fs').readFileSync('ai-filter.js', 'utf8');
     eval(aiFilterContent);

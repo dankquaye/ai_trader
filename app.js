@@ -211,17 +211,18 @@ setInterval(() => {
     if (bot && bot.isRunning) {
         // UI Updates
         if (ui.marketCondition) {
-            let conditionText = bot.marketCondition || 'Analyzing...';
-            if (bot.riskState === 'WAIT') conditionText += ' (WAIT)';
-            else if (bot.riskState === 'AGGRESSIVE') conditionText += ' (AGGRO)';
-            else if (bot.riskState === 'PROTECT') conditionText += ' (PROTECT)';
+            // New bot architecture uses this.marketRegime
+            let conditionText = bot.marketRegime || 'NEUTRAL';
             ui.marketCondition.innerText = conditionText;
 
             // Color Logic
-            if (bot.riskState === 'WAIT') ui.marketCondition.className = 'font-bold text-xs sm:text-sm text-red-500 animate-pulse';
-            else if (bot.riskState === 'AGGRESSIVE') ui.marketCondition.className = 'font-bold text-xs sm:text-sm text-green-400';
-            else if (bot.riskState === 'PROTECT') ui.marketCondition.className = 'font-bold text-xs sm:text-sm text-orange-400';
-            else ui.marketCondition.className = 'font-bold text-xs sm:text-sm text-yellow-400';
+            if (conditionText.includes('VOLATILE') || conditionText.includes('CHOPPY')) {
+                ui.marketCondition.className = 'font-bold text-xs sm:text-sm text-red-500 animate-pulse';
+            } else if (conditionText.includes('TRENDING')) {
+                ui.marketCondition.className = 'font-bold text-xs sm:text-sm text-green-400';
+            } else {
+                ui.marketCondition.className = 'font-bold text-xs sm:text-sm text-yellow-400';
+            }
         }
 
         if (ui.signalConfidence) ui.signalConfidence.innerText = (bot.confidence || 0).toFixed(1) + '%';
