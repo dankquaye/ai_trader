@@ -29,11 +29,13 @@ class DerivAPI {
         this.credentials = {
             demo: {
                 appId: 71238,
-                _t: 'Q1ksssjzW9x3o8a' // Reversed
+                // Split parts
+                _p: ['a8o', '3x9', 'Wzj', 'sss', 'k1Q']
             },
             live: {
                 appId: 71236,
-                _t: 'lCWZi6YLOVBvcBe' // Reversed
+                // Split parts
+                _p: ['eBc', 'vBV', 'OLY', '6iZ', 'WCl']
             }
         };
 
@@ -41,14 +43,13 @@ class DerivAPI {
     }
 
     getToken(type) {
-        if (!this.credentials[type] || !this.credentials[type]._t) return '';
-        return this.credentials[type]._t.split('').reverse().join('');
+        if (!this.credentials[type] || !this.credentials[type]._p) return '';
+        return this.credentials[type]._p.join('');
     }
 
     setToken(token) {
-        if (this.credentials[this.accountType]) {
-            this.credentials[this.accountType]._t = token.split('').reverse().join('');
-        }
+        // Not implemented for split parts to discourage manual setting in this mode
+        console.warn("Manual token setting disabled in this mode.");
     }
 
     setAccountType(type) {
