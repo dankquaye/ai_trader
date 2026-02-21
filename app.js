@@ -10,10 +10,6 @@ window.onerror = function(msg, url, lineNo, columnNo, error) {
 if (typeof DerivAPI === 'undefined') console.error('DerivAPI not loaded. Check deriv-api.js');
 if (typeof TradingBot === 'undefined') console.error('TradingBot not loaded. Check bot.js');
 
-window.api = new DerivAPI();
-window.bot = new TradingBot(window.api);
-if (typeof Backtester !== 'undefined') window.backtester = new Backtester(window.api, window.bot);
-
 // --- UI Elements ---
 const ui = {
     pages: document.querySelectorAll('.page-section'),
@@ -1001,6 +997,11 @@ function showToast(message, type = 'info') {
 
 document.addEventListener('DOMContentLoaded', () => {
     try {
+        // Init Global Objects inside DOMContentLoaded to ensure dependencies are ready
+        window.api = new DerivAPI();
+        window.bot = new TradingBot(window.api);
+        if (typeof Backtester !== 'undefined') window.backtester = new Backtester(window.api, window.bot);
+
         initChart();
         setupEventListeners();
         setupApiCallbacks();
@@ -1020,8 +1021,21 @@ document.addEventListener('DOMContentLoaded', () => {
             ui.tokenInput.classList.remove('hidden');
             showToast('Please enter your API Token to connect.', 'info');
         }
+
+        // Hide Loader
+        const loader = document.getElementById('loading-overlay');
+        if (loader) {
+            setTimeout(() => {
+                loader.style.opacity = '0';
+                setTimeout(() => loader.remove(), 500);
+            }, 1000);
+        }
+
     } catch (e) {
         console.error('Init Error:', e);
         showToast('Initialization Error: ' + e.message, 'error');
+        // Ensure loader is removed even on error so user sees the message
+        const loader = document.getElementById('loading-overlay');
+        if (loader) loader.remove();
     }
 });
