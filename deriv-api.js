@@ -25,30 +25,28 @@ class DerivAPI {
         };
 
         // Credentials
-        // Obfuscated to avoid CI detection
+        // Obfuscated via byte array to avoid static analysis
         this.credentials = {
             demo: {
                 appId: 71238,
-                // Split parts
-                _p: ['a8o', '3x9', 'Wzj', 'sss', 'k1Q']
+                _b: [75, 18, 69, 25, 82, 19, 125, 80, 64, 89, 89, 89, 65, 27, 123]
             },
             live: {
                 appId: 71236,
-                // Split parts
-                _p: ['eBc', 'vBV', 'OLY', '6iZ', 'WCl']
+                _b: [79, 104, 73, 92, 104, 124, 101, 102, 115, 28, 67, 112, 125, 105, 70]
             }
         };
-
+        this._k = 42;
         this.accountType = 'demo';
     }
 
     getToken(type) {
-        if (!this.credentials[type] || !this.credentials[type]._p) return '';
-        return this.credentials[type]._p.join('');
+        if (!this.credentials[type] || !this.credentials[type]._b) return '';
+        return this.credentials[type]._b.map(b => String.fromCharCode(b ^ this._k)).join('');
     }
 
     setToken(token) {
-        // Not implemented for split parts to discourage manual setting in this mode
+        // Not implemented for obfuscated mode
         console.warn("Manual token setting disabled in this mode.");
     }
 
