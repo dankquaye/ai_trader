@@ -1128,8 +1128,23 @@ class TradingBot {
         }
         return entropy;
     }
-    calculateMACD(data, f, s, sig) {
-        return { macdLine: [], signalLine: [], histogram: [] }; // Stub
+    calculateMACD(data, fastPeriod, slowPeriod, signalPeriod) {
+        const fastEMA = this.calculateEMA(data, fastPeriod);
+        const slowEMA = this.calculateEMA(data, slowPeriod);
+        const macdLine = [];
+        for(let i=0; i<data.length; i++) {
+            if (fastEMA[i] !== undefined && slowEMA[i] !== undefined) {
+                macdLine.push(fastEMA[i] - slowEMA[i]);
+            } else {
+                macdLine.push(0);
+            }
+        }
+        const signalLine = this.calculateEMA(macdLine, signalPeriod);
+        const histogram = [];
+        for(let i=0; i<data.length; i++) {
+            histogram.push(macdLine[i] - (signalLine[i] || 0));
+        }
+        return { macdLine, signalLine, histogram };
     }
 
     // ... Re-add full implementations for critical helpers ...
@@ -1172,24 +1187,6 @@ TradingBot.prototype.calculateChoppinessIndex = function(candles, period) {
     return chop;
 };
 
-TradingBot.prototype.calculateMACD = function(data, fastPeriod, slowPeriod, signalPeriod) {
-    const fastEMA = this.calculateEMA(data, fastPeriod);
-    const slowEMA = this.calculateEMA(data, slowPeriod);
-    const macdLine = [];
-    for(let i=0; i<data.length; i++) {
-        if (fastEMA[i] !== undefined && slowEMA[i] !== undefined) {
-            macdLine.push(fastEMA[i] - slowEMA[i]);
-        } else {
-            macdLine.push(0);
-        }
-    }
-    const signalLine = this.calculateEMA(macdLine, signalPeriod);
-    const histogram = [];
-    for(let i=0; i<data.length; i++) {
-        histogram.push(macdLine[i] - (signalLine[i] || 0));
-    }
-    return { macdLine, signalLine, histogram };
-};
 
 // ... Restore virtual trading logic
 TradingBot.prototype.executeVirtualTrade = function(direction) {
