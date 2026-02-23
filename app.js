@@ -48,7 +48,6 @@ const ui = {
         adxThreshold: document.getElementById('adx-threshold'),
         avoidSqueeze: document.getElementById('avoid-squeeze'),
         autoSelect: document.getElementById('auto-select-asset'),
-        useAIFilter: document.getElementById('use-ai-filter'),
         lockParams: document.getElementById('lock-params')
     },
     profile: {
@@ -818,7 +817,6 @@ function setupEventListeners() {
         ui.botSettings.adxThreshold,
         ui.botSettings.avoidSqueeze,
         ui.botSettings.autoSelect,
-        ui.botSettings.useAIFilter,
         ui.botSettings.lockParams,
         ui.inputs.stake,
         ui.inputs.duration
