@@ -1251,3 +1251,48 @@ TradingBot.prototype.handleVirtualResult = function(isWin) {
         if(window.updateRecoveryStatus) window.updateRecoveryStatus(false);
     }
 };
+// Missing Helper Methods
+TradingBot.prototype.detectMarketCondition = function() {
+    if (this.candles1m.length < 20) {
+        this.marketCondition = 'Analyzing';
+        return;
+    }
+    const closes = this.candles1m.map(c => c.close);
+    const adxData = this.calculateADX(closes, 14);
+    const lastAdx = adxData[adxData.length - 1] || 0;
+    this.marketCondition = lastAdx > 25 ? 'Trending' : 'Ranging';
+};
+
+TradingBot.prototype.determineRiskState = function() {
+    if (this.consecutiveLosses >= 2) {
+        this.riskState = 'PROTECT';
+    } else {
+        this.riskState = 'NORMAL';
+    }
+};
+
+TradingBot.prototype.adjustParameters = function() {
+    if (this.marketCondition === 'Trending') {
+        this.params.confidenceThreshold = 0.75;
+    } else {
+        this.params.confidenceThreshold = 0.85;
+    }
+};
+
+TradingBot.prototype.analyzeMultiTF = function() {
+    // Fallback to Quantum or simpler logic
+    return this.analyzeQuantumEnlargement();
+};
+
+TradingBot.prototype.updateStakeWithRisk = function() {
+    // Basic risk check
+    if (this.riskState === 'PROTECT') {
+        return false; // Skip trade in protection mode
+    }
+    return true;
+};
+
+TradingBot.prototype.setRiskState = function(state, reason) {
+    this.riskState = state;
+    this.log(`Risk State changed to ${state}: ${reason}`);
+};
