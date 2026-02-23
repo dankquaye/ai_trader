@@ -130,7 +130,18 @@ class DerivAPI {
     sendRequest(data, suppressGlobal = false) {
         return new Promise((resolve, reject) => {
             if (!this.isConnected) return reject(new Error('Not connected'));
-            const reqId = Date.now() + Math.floor(Math.random() * 1000);
+
+            let reqId;
+            // Use crypto.getRandomValues for secure randomness if available
+            const cryptoObj = (typeof globalThis !== 'undefined' && globalThis.crypto) || (typeof window !== 'undefined' && window.crypto);
+            if (cryptoObj && cryptoObj.getRandomValues) {
+                const array = new Uint32Array(1);
+                cryptoObj.getRandomValues(array);
+                reqId = Date.now() + (array[0] % 1000);
+            } else {
+                reqId = Date.now() + Math.floor(Math.random() * 1000);
+            }
+
             data.req_id = reqId;
 
             const timeoutId = setTimeout(() => {
