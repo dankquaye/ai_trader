@@ -1,8 +1,8 @@
-// bot.js - Elite Execution System with Modular Architecture
+// bot.js - Standard Execution System
 
 /**
- * Elite Trading Bot
- * Modular Architecture: Signal -> Regime -> AI Gate -> Risk -> Execution -> Watchdog
+ * Standard Trading Bot
+ * Modular Architecture: Signal -> Regime -> Risk -> Execution -> Watchdog
  */
 class TradingBot {
     constructor(api) {
@@ -13,17 +13,6 @@ class TradingBot {
         this.isBacktesting = false;
         this.isPaused = false;
         this.isParamLocked = false;
-
-        // --- Components ---
-        // Ensure AIFilter is available
-        if (typeof AIFilter !== 'undefined') {
-            this.aiFilter = new AIFilter();
-        } else {
-            console.warn('AIFilter not defined. AI features disabled.');
-            this.aiFilter = { init: async () => {}, predict: async () => null, isReliable: false };
-        }
-        this.useAIFilter = false;
-        this.optimizer = null;
 
         // --- Config Defaults ---
         this.strategy = 'ultra_instinct';
@@ -39,7 +28,7 @@ class TradingBot {
         this.bbPeriod = 20;
         this.bbStdDev = 2;
 
-        // --- Elite Risk Settings ---
+        // --- Risk Settings ---
         this.riskSettings = {
             maxDailyLoss: 0.05, // 5% max daily loss
             maxDailyProfit: 0.10, // 10% daily target
@@ -84,14 +73,14 @@ class TradingBot {
         this.activeContracts = new Map();
 
         // --- Learning ---
-        this.learning = { totalTrades: 0, wins: 0, threshold: 4.5 };
+        this.learning = { totalTrades: 0, wins: 0 };
     }
 
     // ============================================================
     // Lifecycle
     // ============================================================
 
-    async start() {
+    start() {
         this.isRunning = true;
         this.isPaused = false;
         this.totalProfit = 0;
@@ -108,9 +97,7 @@ class TradingBot {
             this.equityHigh = this.balance;
         }
 
-        if (this.useAIFilter && this.aiFilter && this.aiFilter.init) await this.aiFilter.init();
-
-        this.log('Elite Bot System Started. Initializing...');
+        this.log('Bot System Started.');
     }
 
     stop() {
@@ -119,7 +106,7 @@ class TradingBot {
     }
 
     // ============================================================
-    // Core Pipeline: The Heart of the System
+    // Core Pipeline
     // ============================================================
 
     async processTick(tick) {
@@ -172,17 +159,7 @@ class TradingBot {
         const signal = await this._generateSignal();
         if (!signal) return;
 
-        // Pipeline Step 3: AI Probability Gate
-        let aiScore = 0.5;
-        if (this.useAIFilter) {
-            aiScore = await this._queryAIGate();
-            if (aiScore < 0.65) {
-                // this.log(`AI Rejected Signal (${aiScore.toFixed(2)} < 0.65)`);
-                return;
-            }
-        }
-
-        // Pipeline Step 4: Risk Engine Validation & Sizing
+        // Pipeline Step 3: Risk Engine Validation & Sizing
         const riskParams = this._riskEngineCheck();
         if (!riskParams.approved) {
             this.log(`Risk Engine Blocked: ${riskParams.reason}`);
@@ -190,7 +167,7 @@ class TradingBot {
             return;
         }
 
-        // Pipeline Step 5: Microstructure Confirmation (Tick Acceleration)
+        // Pipeline Step 4: Microstructure Confirmation (Tick Acceleration)
         if (!this._confirmMicrostructure(signal)) {
             return;
         }
@@ -199,11 +176,10 @@ class TradingBot {
         this.currentTradeReasoning = {
             marketCondition: this.marketRegime,
             finalScore: this.confidence,
-            ai: { buy: aiScore, sell: 1-aiScore }, // Approx
-            volatility: 0, // Fill if needed
+            volatility: 0
         };
 
-        // Pipeline Step 6: Execution
+        // Pipeline Step 5: Execution
         this._executeTrade(signal, riskParams.stake);
     }
 
@@ -225,7 +201,7 @@ class TradingBot {
         const avgPrice = closes[closes.length-1];
         const volatilityPct = (lastATR / avgPrice) * 100;
 
-        if (volatilityPct > 0.5) return 'VOLATILE_UNSAFE'; // > 0.5% movement per minute is dangerous
+        if (volatilityPct > 0.5) return 'VOLATILE_UNSAFE';
 
         // 3. Trend Detection (Simple EMA)
         const ema20 = this.calculateEMA(closes, 20);
@@ -264,21 +240,7 @@ class TradingBot {
     }
 
     // ============================================================
-    // Module 3: AI Gate
-    // ============================================================
-
-    async _queryAIGate() {
-        if (!this.aiFilter.isReliable) return 1.0; // Pass if AI not ready (or return 0 to block)
-
-        const sequence = this.extractSequence(this.candles1m.length - 1, 10);
-        if (!sequence) return 0.5;
-
-        const prediction = await this.aiFilter.predict(sequence);
-        return prediction ? prediction.confidence : 0.5;
-    }
-
-    // ============================================================
-    // Module 4: Risk Engine
+    // Module 3: Risk Engine
     // ============================================================
 
     _riskEngineCheck() {
@@ -307,29 +269,11 @@ class TradingBot {
             }
         }
 
-        // 3. Position Sizing (Kelly Approximation)
+        // 3. Position Sizing
         let stake = this.initialStake;
 
         if (this.accountType === 'live') {
-            // Kelly: f = (bp - q) / b
-            // b = odds - 1 (e.g. payout 0.9 -> b=0.9)
-            // p = win probability (historical)
-            // q = loss probability
-            // For binary: f = p - q (if payout 1:1, usually ~0.9)
-            // Simple Safe: Risk 2% of balance
-
             stake = this.balance * this.riskSettings.riskPerTrade;
-
-            // Adjust for Kelly if enough data
-            if (this.learning.totalTrades > 50) {
-                const wr = this.learning.wins / this.learning.totalTrades;
-                const payout = 0.9; // Avg payout
-                const kelly = ((wr * (payout + 1)) - 1) / payout;
-                if (kelly > 0) {
-                    const kellyStake = this.balance * kelly * this.riskSettings.kellyFraction;
-                    stake = Math.min(stake, kellyStake); // Cap at 2% risk or Kelly
-                }
-            }
         }
 
         stake = Math.max(0.35, parseFloat(stake.toFixed(2))); // Min stake 0.35
@@ -338,11 +282,10 @@ class TradingBot {
     }
 
     // ============================================================
-    // Module 5: Microstructure & Execution
+    // Module 4: Microstructure & Execution
     // ============================================================
 
     _checkMicrostructureSpike() {
-        // Simple spike detection: price move > 3 standard deviations of last 10 ticks
         if (this.ticks.length < 20) return false;
 
         const last10 = this.ticks.slice(-10);
@@ -352,7 +295,6 @@ class TradingBot {
 
         const lastTick = this.ticks[this.ticks.length-1];
         if (Math.abs(lastTick - mean) > std * 4) {
-            // this.log('Microstructure Spike Detected. Skipping.');
             return true;
         }
         return false;
@@ -443,7 +385,7 @@ class TradingBot {
     // Calculations & Indicators
     // ============================================================
 
-    // Legacy Analysis Methods (Restored for compatibility)
+    // Analysis Methods
     analyzeRSI(ticks, lastPrice) {
         const rsi = this.calculateRSI(ticks, this.rsiPeriod);
         const lastRSI = rsi[rsi.length - 1];
@@ -620,35 +562,26 @@ class TradingBot {
         return { buy: last < 30 ? 0.8 : 0.4, sell: last > 70 ? 0.8 : 0.4 };
     }
 
-    // Legacy support for UI calls
     setBacktestMode(enabled) { this.isBacktesting = enabled; }
     setAccountType(type) { this.accountType = type; this.log('Account: ' + type); }
     togglePause() { this.isPaused = !this.isPaused; return this.isPaused; }
     log(msg) { console.log('[BOT]', msg); if(document.getElementById('bot-logs')) { const d = document.createElement('div'); d.innerText = msg; document.getElementById('bot-logs').prepend(d); } }
-
-    // AI Feature Extraction
-    extractSequence(index, steps) {
-        if (index < steps + 30) return null;
-        const seq = [];
-        const closes = this.candles1m.map(c => c.close);
-
-        // Pre-calculate indicators for speed
-        const rsi = this.calculateRSI(closes, 14);
-        const sma = this.calculateSMA(closes, 20);
-
-        for (let i = 0; i < steps; i++) {
-            const idx = index - steps + 1 + i;
-            if (idx >= closes.length) break;
-
-            // Simple Feature Set: RSI, SMA Diff, Log Return
-            const feat = [
-                rsi[idx] / 100,
-                (closes[idx] - sma[idx]) / sma[idx],
-                Math.log(closes[idx] / closes[idx-1])
-            ];
-            seq.push(feat);
-        }
-        return seq;
+    setStrategyParams(params) {
+        if (params.rsiPeriod) this.rsiPeriod = parseInt(params.rsiPeriod);
+        if (params.rsiOverbought) this.rsiOverbought = parseInt(params.rsiOverbought);
+        if (params.rsiOversold) this.rsiOversold = parseInt(params.rsiOversold);
+        if (params.bbPeriod) this.bbPeriod = parseInt(params.bbPeriod);
+        if (params.bbStdDev) this.bbStdDev = parseFloat(params.bbStdDev);
+        if (params.smaPeriod) this.smaPeriod = parseInt(params.smaPeriod);
+        this.log('Strategy Params Updated');
+    }
+    getLearningState() { return this.learning; }
+    setLearningState(state) { this.learning = state; }
+    evaluateScore(candles) {
+        // Simple score for auto-selector
+        const tr = this.calculateATR(candles, 14);
+        const vol = tr[tr.length-1];
+        return vol * 1000; // Crude volatility score
     }
 }
 

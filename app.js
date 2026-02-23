@@ -62,7 +62,6 @@ const ui = {
     marketCondition: document.getElementById('market-condition'),
     signalConfidence: document.getElementById('signal-confidence'),
     marketEntropy: document.getElementById('market-entropy'),
-    aiStatus: document.getElementById('ai-status'),
     healthStatus: document.getElementById('health-status'),
     watchdogStatus: document.getElementById('watchdog-status'),
     gradeStats: {
@@ -229,13 +228,6 @@ setInterval(() => {
              ui.marketEntropy.className = entropy > 2.0 ? 'font-bold text-xs sm:text-sm text-red-400' : 'font-bold text-xs sm:text-sm text-purple-400';
         }
 
-        if (ui.aiStatus && bot.aiFilter) {
-            ui.aiStatus.innerText = bot.aiFilter.status;
-            if (bot.aiFilter.isTraining) ui.aiStatus.className = 'font-bold text-xs text-yellow-400 animate-pulse';
-            else if (bot.aiFilter.isTrained) ui.aiStatus.className = 'font-bold text-xs text-green-400';
-            else ui.aiStatus.className = 'font-bold text-xs text-gray-400';
-        }
-
         if (bot.gradeStats && ui.gradeStats.a) {
             ui.gradeStats.a.innerText = bot.gradeStats.A;
             ui.gradeStats.b.innerText = bot.gradeStats.B;
@@ -258,17 +250,11 @@ function updateLiveDashboard() {
     ui.dashboard.confidence.className = r.finalScore > 0.8 ? "font-bold text-green-400" :
         (r.finalScore < 0.6 ? "font-bold text-red-400" : "font-bold text-yellow-400");
 
-    if (r.ai) {
-        const prob = r.ai.buy > 0.5 ? r.ai.buy : r.ai.sell;
-        ui.dashboard.aiProb.innerText = (prob * 100).toFixed(1) + '%';
-    } else {
-        ui.dashboard.aiProb.innerText = 'OFF';
-    }
-
+    ui.dashboard.aiProb.innerText = 'OFF';
     ui.dashboard.trend.innerText = r.trend ? (r.trend.buy > r.trend.sell ? 'UP' : 'DN') : '-';
     ui.dashboard.mom.innerText = r.momentum ? (r.momentum.buy > r.momentum.sell ? 'UP' : 'DN') : '-';
     ui.dashboard.vol.innerText = r.volatility ? r.volatility.toFixed(2) : '-';
-    ui.dashboard.ai.innerText = r.ai ? (r.ai.buy > 0.5 ? 'UP' : 'DN') : '-';
+    ui.dashboard.ai.innerText = '-';
 
     if (bot.quantumState && bot.quantumState.pendingSignal) {
         ui.dashboard.signal.innerText = `PENDING (${bot.quantumState.confirmationTicks})`;
@@ -599,7 +585,7 @@ function applyPreset(type) {
         ui.botSettings.useFilter.checked = true;
         ui.botSettings.adxThreshold.value = "30";
         ui.botSettings.avoidSqueeze.checked = true;
-        showToast('Conservative AI Preset Loaded', 'success');
+        showToast('Conservative Preset Loaded', 'success');
     } else if (type === 'balanced') {
         ui.botSettings.strategy.value = "quantum";
         ui.botSettings.risk.value = "medium";
@@ -607,7 +593,7 @@ function applyPreset(type) {
         ui.botSettings.useFilter.checked = true;
         ui.botSettings.adxThreshold.value = "25";
         ui.botSettings.avoidSqueeze.checked = true;
-        showToast('Balanced AI Preset Loaded', 'success');
+        showToast('Balanced Preset Loaded', 'success');
     } else if (type === 'growth') {
         ui.botSettings.strategy.value = "dynamic";
         ui.botSettings.risk.value = "high";
@@ -615,7 +601,7 @@ function applyPreset(type) {
         ui.botSettings.useFilter.checked = true;
         ui.botSettings.adxThreshold.value = "20";
         ui.botSettings.avoidSqueeze.checked = false;
-        showToast('Growth AI Preset Loaded', 'success');
+        showToast('Growth Preset Loaded', 'success');
     }
 
     ui.botSettings.strategy.dispatchEvent(new Event('change'));
