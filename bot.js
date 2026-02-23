@@ -1107,24 +1107,40 @@ class TradingBot {
     calculateChoppinessIndex(candles, period) { return []; } // Simplified stub for cleanup if unused in main flow or fully implemented
     calculateShannonEntropy(candles, period) {
         if (candles.length < period + 1) return 0;
-        const returns = [];
-        for (let i = candles.length - period; i < candles.length; i++) {
-            returns.push(Math.log(candles[i].close / candles[i-1].close));
+
+        let min = Infinity;
+        let max = -Infinity;
+        const startIdx = candles.length - period;
+
+        // Pass 1: Find min/max
+        for (let i = startIdx; i < candles.length; i++) {
+            const r = Math.log(candles[i].close / candles[i - 1].close);
+            if (r < min) min = r;
+            if (r > max) max = r;
         }
-        const min = Math.min(...returns);
-        const max = Math.max(...returns);
+
         const binCount = Math.floor(Math.sqrt(period));
         const binSize = (max - min) / binCount;
+
         if (binSize === 0) return 0;
-        const bins = {};
-        returns.forEach(r => {
+
+        const bins = new Uint16Array(binCount + 1);
+
+        // Pass 2: Fill bins
+        for (let i = startIdx; i < candles.length; i++) {
+            const r = Math.log(candles[i].close / candles[i - 1].close);
             const key = Math.floor((r - min) / binSize);
-            bins[key] = (bins[key] || 0) + 1;
-        });
+            if (key >= 0 && key <= binCount) {
+                bins[key]++;
+            }
+        }
+
         let entropy = 0;
-        for (const key in bins) {
-            const p = bins[key] / period;
-            entropy -= p * Math.log(p);
+        for (let i = 0; i < bins.length; i++) {
+            if (bins[i] > 0) {
+                const p = bins[i] / period;
+                entropy -= p * Math.log(p);
+            }
         }
         return entropy;
     }
