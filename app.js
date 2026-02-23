@@ -687,15 +687,48 @@ window.updateTradeHistory = (history, totalProfit, wins, losses) => {
         const color = trade.profit >= 0 ? 'text-green-400' : 'text-red-400';
         const gradeColor = trade.grade?.startsWith('A') ? 'text-green-400' : (trade.grade === 'F' ? 'text-red-500' : 'text-gray-400');
 
-        tr.innerHTML = `
-            <td class="px-6 py-4">${trade.time}</td>
-            <td class="px-6 py-4">${trade.symbol}</td>
-            <td class="px-6 py-4">${trade.type}</td>
-            <td class="px-6 py-4">$${trade.stake}</td>
-            <td class="px-6 py-4 font-bold ${color}">$${trade.profit.toFixed(2)}</td>
-            <td class="px-6 py-4 font-bold ${gradeColor}">${trade.grade || '-'}</td>
-            <td class="px-6 py-4"><button class="text-xs bg-blue-900 text-blue-300 px-2 py-1 rounded hover:bg-blue-800" onclick="event.stopPropagation(); openModal(${originalIndex})"><i class="fa-solid fa-magnifying-glass"></i> Details</button></td>
-        `;
+        const tdTime = document.createElement('td');
+        tdTime.className = 'px-6 py-4';
+        tdTime.textContent = trade.time;
+
+        const tdSymbol = document.createElement('td');
+        tdSymbol.className = 'px-6 py-4';
+        tdSymbol.textContent = trade.symbol;
+
+        const tdType = document.createElement('td');
+        tdType.className = 'px-6 py-4';
+        tdType.textContent = trade.type;
+
+        const tdStake = document.createElement('td');
+        tdStake.className = 'px-6 py-4';
+        tdStake.textContent = `$${trade.stake}`;
+
+        const tdProfit = document.createElement('td');
+        tdProfit.className = `px-6 py-4 font-bold ${color}`;
+        tdProfit.textContent = `$${trade.profit.toFixed(2)}`;
+
+        const tdGrade = document.createElement('td');
+        tdGrade.className = `px-6 py-4 font-bold ${gradeColor}`;
+        tdGrade.textContent = trade.grade || '-';
+
+        const tdDetails = document.createElement('td');
+        tdDetails.className = 'px-6 py-4';
+        const btn = document.createElement('button');
+        btn.className = 'text-xs bg-blue-900 text-blue-300 px-2 py-1 rounded hover:bg-blue-800';
+        btn.innerHTML = '<i class="fa-solid fa-magnifying-glass"></i> Details';
+        btn.onclick = (e) => {
+            e.stopPropagation();
+            openModal(originalIndex);
+        };
+        tdDetails.appendChild(btn);
+
+        tr.appendChild(tdTime);
+        tr.appendChild(tdSymbol);
+        tr.appendChild(tdType);
+        tr.appendChild(tdStake);
+        tr.appendChild(tdProfit);
+        tr.appendChild(tdGrade);
+        tr.appendChild(tdDetails);
         tr.onclick = () => openModal(originalIndex);
         ui.historyTable.appendChild(tr);
     });
