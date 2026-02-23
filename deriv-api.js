@@ -29,16 +29,22 @@ class DerivAPI {
         // Hardcoded tokens removed for security.
         this.credentials = {
             demo: {
-                appId: 71238,
+                appId: '', // User must provide
                 token: '' // User must provide
             },
             live: {
-                appId: 71236,
+                appId: '', // User must provide
                 token: '' // User must provide
             }
         };
 
         this.accountType = 'demo';
+    }
+
+    setAppId(appId) {
+        if (this.credentials[this.accountType]) {
+            this.credentials[this.accountType].appId = appId;
+        }
     }
 
     setToken(token) {
@@ -62,6 +68,11 @@ class DerivAPI {
         const creds = this.credentials[this.accountType];
         this.appId = creds.appId;
         this.token = creds.token;
+
+        if (!this.appId) {
+            console.warn('Cannot connect: Missing App ID');
+            return;
+        }
 
         if (!this.token) {
             console.warn('Cannot connect: Missing API Token');

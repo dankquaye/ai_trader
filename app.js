@@ -19,6 +19,7 @@ const ui = {
     pages: document.querySelectorAll('.page-section'),
     navBtns: document.querySelectorAll('.nav-btn'),
     accountSelector: document.getElementById('account-selector'),
+    appIdInput: document.getElementById('app-id-input'),
     tokenInput: document.getElementById('api-token-input'),
     balanceDisplay: document.getElementById('balance-display'),
     assetSelector: document.getElementById('asset-selector'),
@@ -459,6 +460,7 @@ function saveSettings() {
         stake: ui.inputs.stake.value,
         duration: ui.inputs.duration.value,
         asset: ui.assetSelector.value,
+        appId: ui.appIdInput.value,
 
         rsiPeriod: bot.rsiPeriod,
         rsiOverbought: bot.rsiOverbought,
@@ -480,6 +482,10 @@ function loadSettings() {
         const s = JSON.parse(stored);
 
         if (s.asset) ui.assetSelector.value = s.asset;
+        if (s.appId) {
+            ui.appIdInput.value = s.appId;
+            api.setAppId(s.appId);
+        }
         if (s.stake) ui.inputs.stake.value = s.stake;
         if (s.duration) ui.inputs.duration.value = s.duration;
 
@@ -712,6 +718,143 @@ function aggregateTick(time, price) {
         currentCandle.close = price;
         return { isNew: false, candle: currentCandle };
     }
+}
+
+// --- Event Listeners ---
+
+function setupEventListeners() {
+    // Navigation
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            ui.navBtns.forEach(b => b.classList.remove('active', 'text-blue-500'));
+            btn.classList.add('active', 'text-blue-500');
+            ui.pages.forEach(p => p.classList.add('hidden'));
+            const target = document.getElementById(btn.dataset.target);
+            if (target) target.classList.remove('hidden');
+        });
+    });
+
+    // Connection & Settings
+    ui.appIdInput.addEventListener('change', () => {
+        api.setAppId(ui.appIdInput.value);
+        saveSettings();
+    });
+
+    ui.tokenInput.addEventListener('change', () => {
+        api.setToken(ui.tokenInput.value);
+        api.connect();
+    });
+
+    ui.accountSelector.addEventListener('change', () => {
+        api.setAccountType(ui.accountSelector.value);
+    });
+
+    ui.assetSelector.addEventListener('change', () => {
+        const symbol = ui.assetSelector.value;
+        api.subscribeTicks(symbol);
+        api.getHistory(symbol);
+        saveSettings();
+    });
+
+    // Bot Controls
+    ui.btns.startBot.addEventListener('click', () => {
+        bot.start();
+        ui.btns.startBot.classList.add('hidden');
+        ui.btns.stopBot.classList.remove('hidden');
+        ui.btns.pauseBot.classList.remove('hidden');
+        ui.btns.killSwitch.classList.remove('hidden');
+        ui.btns.killSwitch.disabled = false;
+        startAutoScanner();
+    });
+
+    ui.btns.stopBot.addEventListener('click', () => {
+        bot.stop();
+        ui.btns.startBot.classList.remove('hidden');
+        ui.btns.stopBot.classList.add('hidden');
+        ui.btns.pauseBot.classList.add('hidden');
+        ui.btns.killSwitch.classList.add('hidden');
+        stopAutoScanner();
+    });
+
+    ui.btns.pauseBot.addEventListener('click', () => {
+        if (bot.isRunning) {
+            bot.pause();
+            ui.btns.pauseBot.innerHTML = '<i class="fa-solid fa-play"></i>';
+        } else {
+            bot.resume();
+            ui.btns.pauseBot.innerHTML = '<i class="fa-solid fa-pause"></i>';
+        }
+    });
+
+    ui.btns.killSwitch.addEventListener('click', () => {
+        bot.stop();
+        api.disconnect(); // Hard disconnect
+        ui.btns.startBot.classList.remove('hidden');
+        ui.btns.stopBot.classList.add('hidden');
+        ui.btns.pauseBot.classList.add('hidden');
+        ui.btns.killSwitch.classList.add('hidden');
+        showToast('EMERGENCY STOP ACTIVATED', 'error');
+    });
+
+    // Features
+    ui.btns.exportHistory.addEventListener('click', exportHistory);
+    ui.btns.sendSupport.addEventListener('click', () => showToast('Message sent! Support will contact you shortly.', 'success'));
+    ui.btns.loadChallenge.addEventListener('click', () => applyPreset('challenge'));
+
+    // Bot Configuration Inputs
+    Object.values(ui.inputs).forEach(input => {
+        input.addEventListener('change', saveSettings);
+    });
+
+    // Strategy Settings
+    ui.botSettings.strategy.addEventListener('change', () => {
+        renderStrategyParams(ui.botSettings.strategy.value);
+        saveSettings();
+    });
+
+    ui.botSettings.risk.addEventListener('change', saveSettings);
+    ui.botSettings.useMartingale.addEventListener('change', saveSettings);
+    ui.botSettings.useSmartRisk.addEventListener('change', saveSettings);
+    ui.botSettings.martingaleMultiplier.addEventListener('change', saveSettings);
+    ui.botSettings.takeProfit.addEventListener('change', saveSettings);
+    ui.botSettings.stopLoss.addEventListener('change', saveSettings);
+    ui.botSettings.useFilter.addEventListener('change', saveSettings);
+    ui.botSettings.adxThreshold.addEventListener('change', saveSettings);
+    ui.botSettings.avoidSqueeze.addEventListener('change', saveSettings);
+    ui.botSettings.autoSelect.addEventListener('change', () => {
+        if(ui.botSettings.autoSelect.checked) startAutoScanner();
+        else stopAutoScanner();
+        saveSettings();
+    });
+    ui.botSettings.lockParams.addEventListener('change', () => {
+        bot.setParamLock(ui.botSettings.lockParams.checked);
+        saveSettings();
+    });
+
+    // Preset Buttons
+    document.querySelectorAll('.btn-preset').forEach(btn => {
+        btn.addEventListener('click', () => applyPreset(btn.dataset.preset));
+    });
+
+    // Manual Trade Buttons
+    ui.btns.rise.addEventListener('click', () => {
+        if (!api.isConnected) return showToast('Not Connected', 'error');
+        api.placeTrade('rise', ui.inputs.stake.value, ui.inputs.duration.value, ui.assetSelector.value);
+    });
+
+    ui.btns.fall.addEventListener('click', () => {
+        if (!api.isConnected) return showToast('Not Connected', 'error');
+        api.placeTrade('fall', ui.inputs.stake.value, ui.inputs.duration.value, ui.assetSelector.value);
+    });
+
+    // Modal Close
+    ui.modal.closes.forEach(c => c.addEventListener('click', closeModal));
+    ui.modal.el.addEventListener('click', (e) => {
+        if (e.target === ui.modal.el || e.target.classList.contains('modal-overlay')) closeModal();
+    });
+
+    // Backtest
+    if(ui.backtest.runBtn) ui.backtest.runBtn.addEventListener('click', runBacktest);
 }
 
 // --- API Events ---
