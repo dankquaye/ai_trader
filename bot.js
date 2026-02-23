@@ -924,13 +924,9 @@ class TradingBot {
     // Helpers (Feature Extraction & Indicators)
     // ============================================================
 
-    extractFeatures(index) {
+    _calculateAllIndicators() {
         const closes = this.candles1m.map(c => c.close);
-        if (index < 30 || index >= closes.length) return null;
-
-        // Note: For performance, this recalculates entire array.
-        // In a highly optimized version, we would maintain rolling buffers.
-        const indicators = {
+        return {
             rsi: this.calculateRSI(closes, 14),
             adx: this.calculateADX(closes, 14),
             sma: this.calculateSMA(closes, 20),
@@ -938,6 +934,15 @@ class TradingBot {
             macd: this.calculateMACD(closes, 12, 26, 9).histogram,
             atr: this.calculateATR(this.candles1m, 14)
         };
+    }
+
+    extractFeatures(index, indicators = null) {
+        if (index < 30 || index >= this.candles1m.length) return null;
+
+        // Use cached indicators if provided, otherwise calculate them
+        if (!indicators) {
+            indicators = this._calculateAllIndicators();
+        }
 
         const c = this.candles1m[index];
         const rsiVal = indicators.rsi[index] / 100;
@@ -956,9 +961,10 @@ class TradingBot {
 
     extractSequence(index, steps) {
         if (index < steps + 30) return null;
+        const indicators = this._calculateAllIndicators();
         const seq = [];
         for (let i = 0; i < steps; i++) {
-            const feat = this.extractFeatures(index - steps + 1 + i);
+            const feat = this.extractFeatures(index - steps + 1 + i, indicators);
             if (!feat) return null;
             seq.push(feat);
         }
