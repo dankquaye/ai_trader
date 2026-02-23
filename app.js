@@ -201,43 +201,45 @@ async function runBacktest() {
 
 // --- Dashboard & Updates ---
 
-setInterval(() => {
-    if (bot && bot.isRunning) {
-        // UI Updates
-        if (ui.marketCondition) {
-            // New bot architecture uses this.marketRegime
-            let conditionText = bot.marketRegime || 'NEUTRAL';
-            ui.marketCondition.innerText = conditionText;
+function startDashboardUpdates() {
+    setInterval(() => {
+        if (typeof bot !== 'undefined' && bot && bot.isRunning) {
+            // UI Updates
+            if (ui.marketCondition) {
+                // New bot architecture uses this.marketRegime
+                let conditionText = bot.marketRegime || 'NEUTRAL';
+                ui.marketCondition.innerText = conditionText;
 
-            // Color Logic
-            if (conditionText.includes('VOLATILE') || conditionText.includes('CHOPPY')) {
-                ui.marketCondition.className = 'font-bold text-xs sm:text-sm text-red-500 animate-pulse';
-            } else if (conditionText.includes('TRENDING')) {
-                ui.marketCondition.className = 'font-bold text-xs sm:text-sm text-green-400';
-            } else {
-                ui.marketCondition.className = 'font-bold text-xs sm:text-sm text-yellow-400';
+                // Color Logic
+                if (conditionText.includes('VOLATILE') || conditionText.includes('CHOPPY')) {
+                    ui.marketCondition.className = 'font-bold text-xs sm:text-sm text-red-500 animate-pulse';
+                } else if (conditionText.includes('TRENDING')) {
+                    ui.marketCondition.className = 'font-bold text-xs sm:text-sm text-green-400';
+                } else {
+                    ui.marketCondition.className = 'font-bold text-xs sm:text-sm text-yellow-400';
+                }
             }
+
+            if (ui.signalConfidence) ui.signalConfidence.innerText = (bot.confidence || 0).toFixed(1) + '%';
+
+            if (ui.marketEntropy) {
+                 const entropy = bot.currentEntropy || 0;
+                 ui.marketEntropy.innerText = entropy.toFixed(2);
+                 ui.marketEntropy.className = entropy > 2.0 ? 'font-bold text-xs sm:text-sm text-red-400' : 'font-bold text-xs sm:text-sm text-purple-400';
+            }
+
+            if (bot.gradeStats && ui.gradeStats.a) {
+                ui.gradeStats.a.innerText = bot.gradeStats.A;
+                ui.gradeStats.b.innerText = bot.gradeStats.B;
+                ui.gradeStats.c.innerText = bot.gradeStats.C;
+                ui.gradeStats.d.innerText = bot.gradeStats.D;
+                ui.gradeStats.f.innerText = bot.gradeStats.F;
+            }
+
+            updateLiveDashboard();
         }
-
-        if (ui.signalConfidence) ui.signalConfidence.innerText = (bot.confidence || 0).toFixed(1) + '%';
-
-        if (ui.marketEntropy) {
-             const entropy = bot.currentEntropy || 0;
-             ui.marketEntropy.innerText = entropy.toFixed(2);
-             ui.marketEntropy.className = entropy > 2.0 ? 'font-bold text-xs sm:text-sm text-red-400' : 'font-bold text-xs sm:text-sm text-purple-400';
-        }
-
-        if (bot.gradeStats && ui.gradeStats.a) {
-            ui.gradeStats.a.innerText = bot.gradeStats.A;
-            ui.gradeStats.b.innerText = bot.gradeStats.B;
-            ui.gradeStats.c.innerText = bot.gradeStats.C;
-            ui.gradeStats.d.innerText = bot.gradeStats.D;
-            ui.gradeStats.f.innerText = bot.gradeStats.F;
-        }
-
-        updateLiveDashboard();
-    }
-}, 500);
+    }, 500);
+}
 
 function updateLiveDashboard() {
     if (!bot || !bot.currentTradeReasoning || !ui.dashboard.regime) return;
@@ -989,6 +991,7 @@ document.addEventListener('DOMContentLoaded', () => {
         initChart();
         setupEventListeners();
         setupApiCallbacks();
+        startDashboardUpdates();
         loadSettings();
 
         // Check for pre-loaded config

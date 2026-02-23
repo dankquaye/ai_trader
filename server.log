@@ -1,7 +1,7 @@
-127.0.0.1 - - [23/Feb/2026 19:03:37] "GET /index.html HTTP/1.1" 200 -
-127.0.0.1 - - [23/Feb/2026 19:03:37] "GET /dist/output.css HTTP/1.1" 200 -
-127.0.0.1 - - [23/Feb/2026 19:03:37] "GET /config.js HTTP/1.1" 200 -
-127.0.0.1 - - [23/Feb/2026 19:03:37] "GET /bot.js HTTP/1.1" 200 -
-127.0.0.1 - - [23/Feb/2026 19:03:37] "GET /app.js HTTP/1.1" 200 -
-127.0.0.1 - - [23/Feb/2026 19:03:37] "GET /deriv-api.js HTTP/1.1" 200 -
-127.0.0.1 - - [23/Feb/2026 19:03:37] "GET /backtest.js HTTP/1.1" 200 -
+127.0.0.1 - - [23/Feb/2026 19:40:50] "GET /index.html HTTP/1.1" 200 -
+127.0.0.1 - - [23/Feb/2026 19:40:50] "GET /dist/output.css HTTP/1.1" 200 -
+127.0.0.1 - - [23/Feb/2026 19:40:50] "GET /config.js HTTP/1.1" 200 -
+127.0.0.1 - - [23/Feb/2026 19:40:50] "GET /backtest.js HTTP/1.1" 200 -
+127.0.0.1 - - [23/Feb/2026 19:40:50] "GET /bot.js HTTP/1.1" 200 -
+127.0.0.1 - - [23/Feb/2026 19:40:50] "GET /app.js HTTP/1.1" 200 -
+127.0.0.1 - - [23/Feb/2026 19:40:50] "GET /deriv-api.js HTTP/1.1" 200 -
