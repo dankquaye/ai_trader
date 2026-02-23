@@ -2,6 +2,54 @@
 // Implements: Meta-Signal Confidence, Outcome-Predictive Models, Regime Classification,
 // Temporal Pattern Recognition (LSTM), Drift Detection, Ensemble Voting, RL, Explainability.
 
+// --- Reinforcement Learning Agent (Q-Learning) ---
+
+class QLAgent {
+    constructor() {
+        this.qTable = {}; // Key: "Regime-Conf", Value: [Q_Action0, Q_Action1, Q_Action2]
+        this.alpha = 0.1; // Learning Rate
+        this.gamma = 0.9; // Discount Factor
+        this.epsilon = 0.1; // Exploration Rate
+        this.actions = [0, 1, 2]; // Tighten, Neutral, Loosen
+    }
+
+    getStateKey(state) {
+        return `${state[0]}-${state[1]}`;
+    }
+
+    getQ(state) {
+        const key = this.getStateKey(state);
+        if (!this.qTable[key]) {
+            this.qTable[key] = [0, 0, 0]; // Init zeros
+        }
+        return this.qTable[key];
+    }
+
+    getAction(state) {
+        const qs = this.getQ(state);
+        if (Math.random() < this.epsilon) {
+            return this.actions[Math.floor(Math.random() * this.actions.length)];
+        }
+        // Argmax
+        let maxQ = -Infinity;
+        let action = 1;
+        qs.forEach((q, i) => {
+            if (q > maxQ) {
+                maxQ = q;
+                action = i;
+            }
+        });
+        return action;
+    }
+
+    learn(state, action, reward) {
+        const qs = this.getQ(state);
+        const currentQ = qs[action];
+        // We assume next state is not critical for this simple contextual bandit-like adaptation
+        qs[action] = currentQ + this.alpha * (reward - currentQ);
+    }
+}
+
 /**
  * Advanced AI Filter using TensorFlow.js
  * Features:
@@ -276,51 +324,4 @@ class AIFilter {
     }
 }
 
-// --- Reinforcement Learning Agent (Q-Learning) ---
-
-class QLAgent {
-    constructor() {
-        this.qTable = {}; // Key: "Regime-Conf", Value: [Q_Action0, Q_Action1, Q_Action2]
-        this.alpha = 0.1; // Learning Rate
-        this.gamma = 0.9; // Discount Factor
-        this.epsilon = 0.1; // Exploration Rate
-        this.actions = [0, 1, 2]; // Tighten, Neutral, Loosen
-    }
-
-    getStateKey(state) {
-        return `${state[0]}-${state[1]}`;
-    }
-
-    getQ(state) {
-        const key = this.getStateKey(state);
-        if (!this.qTable[key]) {
-            this.qTable[key] = [0, 0, 0]; // Init zeros
-        }
-        return this.qTable[key];
-    }
-
-    getAction(state) {
-        const qs = this.getQ(state);
-        if (Math.random() < this.epsilon) {
-            return this.actions[Math.floor(Math.random() * this.actions.length)];
-        }
-        // Argmax
-        let maxQ = -Infinity;
-        let action = 1;
-        qs.forEach((q, i) => {
-            if (q > maxQ) {
-                maxQ = q;
-                action = i;
-            }
-        });
-        return action;
-    }
-
-    learn(state, action, reward) {
-        const qs = this.getQ(state);
-        const currentQ = qs[action];
-        // We assume next state is not critical for this simple contextual bandit-like adaptation
-        qs[action] = currentQ + this.alpha * (reward - currentQ);
-    }
-}
 window.AIFilter = AIFilter;

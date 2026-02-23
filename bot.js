@@ -15,7 +15,13 @@ class TradingBot {
         this.isParamLocked = false;
 
         // --- Components ---
-        this.aiFilter = new AIFilter();
+        // Ensure AIFilter is available
+        if (typeof AIFilter !== 'undefined') {
+            this.aiFilter = new AIFilter();
+        } else {
+            console.warn('AIFilter not defined. AI features disabled.');
+            this.aiFilter = { init: async () => {}, predict: async () => null, isReliable: false };
+        }
         this.useAIFilter = false;
         this.optimizer = null;
 
@@ -71,6 +77,7 @@ class TradingBot {
         this.marketRegime = 'NEUTRAL'; // TRENDING_UP, TRENDING_DOWN, CHOPPY, VOLATILE
         this.currentSignal = null;
         this.confidence = 0;
+        this.currentTradeReasoning = {};
 
         // --- Watchdog ---
         this.watchdog = { state: 'IDLE', timeout: null };
@@ -101,7 +108,7 @@ class TradingBot {
             this.equityHigh = this.balance;
         }
 
-        if (this.useAIFilter) await this.aiFilter.init();
+        if (this.useAIFilter && this.aiFilter && this.aiFilter.init) await this.aiFilter.init();
 
         this.log('Elite Bot System Started. Initializing...');
     }
@@ -166,8 +173,9 @@ class TradingBot {
         if (!signal) return;
 
         // Pipeline Step 3: AI Probability Gate
+        let aiScore = 0.5;
         if (this.useAIFilter) {
-            const aiScore = await this._queryAIGate();
+            aiScore = await this._queryAIGate();
             if (aiScore < 0.65) {
                 // this.log(`AI Rejected Signal (${aiScore.toFixed(2)} < 0.65)`);
                 return;
@@ -186,6 +194,14 @@ class TradingBot {
         if (!this._confirmMicrostructure(signal)) {
             return;
         }
+
+        // Store Reasoning for UI
+        this.currentTradeReasoning = {
+            marketCondition: this.marketRegime,
+            finalScore: this.confidence,
+            ai: { buy: aiScore, sell: 1-aiScore }, // Approx
+            volatility: 0, // Fill if needed
+        };
 
         // Pipeline Step 6: Execution
         this._executeTrade(signal, riskParams.stake);
@@ -427,6 +443,32 @@ class TradingBot {
     // Calculations & Indicators
     // ============================================================
 
+    // Legacy Analysis Methods (Restored for compatibility)
+    analyzeRSI(ticks, lastPrice) {
+        const rsi = this.calculateRSI(ticks, this.rsiPeriod);
+        const lastRSI = rsi[rsi.length - 1];
+        if (lastRSI < this.rsiOversold) return 'rise';
+        if (lastRSI > this.rsiOverbought) return 'fall';
+        return null;
+    }
+
+    analyzeBB(ticks, lastPrice) {
+        const bb = this.calculateBollingerBands(ticks, this.bbPeriod, this.bbStdDev);
+        const lastBB = bb[bb.length - 1];
+        if (lastPrice < lastBB.lower) return 'rise';
+        if (lastPrice > lastBB.upper) return 'fall';
+        return null;
+    }
+
+    analyzeSMA(ticks) {
+        const sma = this.calculateSMA(ticks, this.smaPeriod);
+        const lastSMA = sma[sma.length - 1];
+        const lastPrice = ticks[ticks.length - 1];
+        if (lastPrice > lastSMA) return 'rise';
+        if (lastPrice < lastSMA) return 'fall';
+        return null;
+    }
+
     calculateChoppinessIndex(candles, period) {
         if (candles.length < period + 1) return Array(candles.length).fill(50);
 
@@ -466,7 +508,7 @@ class TradingBot {
         return results;
     }
 
-    // ... (Preserve existing standard indicators: SMA, EMA, RSI, BB, ADX, ATR, TickAccel)
+    // Standard Indicators
     calculateSMA(data, period) {
         let result = [];
         for (let i = 0; i < data.length; i++) {
@@ -562,9 +604,8 @@ class TradingBot {
         return (a1 + a2) / 2;
     }
 
-    // ... (Quantum Engines - preserved for Ultra Instinct)
-    qtTrendEngine() { /* Same as before */
-        // Simply re-using previous logic but ensuring it uses current data
+    // Quantum Engines (Preserved)
+    qtTrendEngine() {
         const c1m = this.candles1m;
         if (c1m.length < 20) return { buy: 0.5, sell: 0.5 };
         const closes = c1m.map(c => c.close);
