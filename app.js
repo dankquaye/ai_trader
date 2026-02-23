@@ -628,6 +628,16 @@ function applyPreset(type) {
 
 // --- Modal Logic ---
 
+function escapeHtml(text) {
+    if (text == null) return '';
+    return text.toString()
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
 function openModal(tradeId) {
     const trade = bot.tradeHistory[tradeId];
     if (!trade) return;
@@ -637,9 +647,9 @@ function openModal(tradeId) {
         <div class="mb-4">
             <h5 class="font-bold text-gray-400 uppercase text-xs mb-1">Overview</h5>
             <div class="grid grid-cols-2 gap-2 bg-gray-900 p-2 rounded">
-                <div><span class="text-gray-500">Symbol:</span> ${trade.symbol}</div>
-                <div><span class="text-gray-500">Result:</span> <span class="${trade.profit > 0 ? 'text-green-400' : 'text-red-400'}">${trade.status} ($${trade.profit})</span></div>
-                <div><span class="text-gray-500">Grade:</span> ${trade.grade}</div>
+                <div><span class="text-gray-500">Symbol:</span> ${escapeHtml(trade.symbol)}</div>
+                <div><span class="text-gray-500">Result:</span> <span class="${trade.profit > 0 ? 'text-green-400' : 'text-red-400'}">${escapeHtml(trade.status)} ($${trade.profit})</span></div>
+                <div><span class="text-gray-500">Grade:</span> ${escapeHtml(trade.grade)}</div>
                 <div><span class="text-gray-500">Confidence:</span> ${(r?.finalScore * 100).toFixed(1)}%</div>
             </div>
         </div>
@@ -688,12 +698,12 @@ window.updateTradeHistory = (history, totalProfit, wins, losses) => {
         const gradeColor = trade.grade?.startsWith('A') ? 'text-green-400' : (trade.grade === 'F' ? 'text-red-500' : 'text-gray-400');
 
         tr.innerHTML = `
-            <td class="px-6 py-4">${trade.time}</td>
-            <td class="px-6 py-4">${trade.symbol}</td>
-            <td class="px-6 py-4">${trade.type}</td>
-            <td class="px-6 py-4">$${trade.stake}</td>
+            <td class="px-6 py-4">${escapeHtml(trade.time)}</td>
+            <td class="px-6 py-4">${escapeHtml(trade.symbol)}</td>
+            <td class="px-6 py-4">${escapeHtml(trade.type)}</td>
+            <td class="px-6 py-4">$${escapeHtml(trade.stake)}</td>
             <td class="px-6 py-4 font-bold ${color}">$${trade.profit.toFixed(2)}</td>
-            <td class="px-6 py-4 font-bold ${gradeColor}">${trade.grade || '-'}</td>
+            <td class="px-6 py-4 font-bold ${gradeColor}">${escapeHtml(trade.grade || '-')}</td>
             <td class="px-6 py-4"><button class="text-xs bg-blue-900 text-blue-300 px-2 py-1 rounded hover:bg-blue-800" onclick="event.stopPropagation(); openModal(${originalIndex})"><i class="fa-solid fa-magnifying-glass"></i> Details</button></td>
         `;
         tr.onclick = () => openModal(originalIndex);
