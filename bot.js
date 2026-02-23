@@ -1014,7 +1014,7 @@ class TradingBot {
     calculateBollingerBands(data, period, stdDev) {
         const sma = this.calculateSMA(data, period);
         return data.map((val, i) => {
-            if (i < period) return { upper: 0, lower: 0, middle: 0 };
+            if (i < period - 1) return { upper: 0, lower: 0, middle: 0 };
             const slice = data.slice(i - period + 1, i + 1);
             const mean = sma[i];
             const sumSq = slice.reduce((a, b) => a + Math.pow(b - mean, 2), 0);
