@@ -896,39 +896,58 @@ function setupApiCallbacks() {
     });
 
     api.on('history', (data) => {
-        const { times, prices } = data;
-        const candles = [];
-        currentCandle = null;
-        for (let i = 0; i < times.length; i++) {
-             const time = times[i];
-             const price = prices[i];
-             const candleTime = Math.floor(time / 5) * 5;
-             if (candles.length === 0 || candles[candles.length - 1].time !== candleTime) {
-                 candles.push({ time: candleTime, open: price, high: price, low: price, close: price });
-             } else {
-                 const last = candles[candles.length - 1];
-                 last.high = Math.max(last.high, price);
-                 last.low = Math.min(last.low, price);
-                 last.close = price;
-             }
+        try {
+            const { times, prices } = data;
+            const candles = [];
+            currentCandle = null;
+            for (let i = 0; i < times.length; i++) {
+                 const time = times[i];
+                 const price = prices[i];
+                 const candleTime = Math.floor(time / 5) * 5;
+                 if (candles.length === 0 || candles[candles.length - 1].time !== candleTime) {
+                     candles.push({ time: candleTime, open: price, high: price, low: price, close: price });
+                 } else {
+                     const last = candles[candles.length - 1];
+                     last.high = Math.max(last.high, price);
+                     last.low = Math.min(last.low, price);
+                     last.close = price;
+                 }
+            }
+            if (candles.length > 0) currentCandle = candles[candles.length - 1];
+            candleSeries.setData(candles);
+        } catch (e) {
+            console.error('History Error:', e);
         }
-        if (candles.length > 0) currentCandle = candles[candles.length - 1];
-        candleSeries.setData(candles);
     });
 
-    api.on('ohlc', (candle) => bot.processCandle(candle, candle.granularity));
+    api.on('ohlc', (candle) => {
+        try {
+            bot.processCandle(candle, candle.granularity);
+        } catch (e) {
+            console.error('OHLC Error:', e);
+        }
+    });
+
     api.on('candles', (candles) => {
-        if (candles.length > 0) {
-            const diff = candles[1].epoch - candles[0].epoch;
-            const granularity = (diff >= 280) ? 300 : 60;
-            candles.forEach(c => bot.processCandle(c, granularity));
+        try {
+            if (candles.length > 0) {
+                const diff = candles[1].epoch - candles[0].epoch;
+                const granularity = (diff >= 280) ? 300 : 60;
+                candles.forEach(c => bot.processCandle(c, granularity));
+            }
+        } catch (e) {
+            console.error('Candles Error:', e);
         }
     });
 
     api.on('tick', (tick) => {
-        bot.processTick(tick);
-        const result = aggregateTick(tick.epoch, tick.quote);
-        candleSeries.update(result.candle);
+        try {
+            bot.processTick(tick);
+            const result = aggregateTick(tick.epoch, tick.quote);
+            candleSeries.update(result.candle);
+        } catch (e) {
+            console.error('Tick Error:', e);
+        }
     });
 
     api.on('buy', (data) => showToast(`Order Placed! Buy Price: ${data.buy_price}`));
