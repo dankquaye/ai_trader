@@ -834,6 +834,64 @@ function showToast(message, type = 'info') {
     }, 3000);
 }
 
+function setupEventListeners() {
+    ui.navBtns.forEach(btn => btn.onclick = () => {
+        ui.pages.forEach(p => p.classList.add('hidden'));
+        document.getElementById(btn.dataset.target).classList.remove('hidden');
+        ui.navBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+    });
+
+    ui.accountSelector.onchange = () => bot.setAccountType(ui.accountSelector.value);
+    ui.tokenInput.onchange = () => ui.tokenInput.value && api.authorize(ui.tokenInput.value.trim());
+    ui.assetSelector.onchange = () => bot.setSymbol(ui.assetSelector.value);
+
+    ui.btns.rise.onclick = () => bot.watchdogAttemptExecution('rise', ui.assetSelector.value);
+    ui.btns.fall.onclick = () => bot.watchdogAttemptExecution('fall', ui.assetSelector.value);
+
+    const toggleUI = (running) => {
+        ui.btns.startBot.classList.toggle('hidden', running);
+        ui.btns.stopBot.classList.toggle('hidden', !running);
+        ui.btns.pauseBot.classList.toggle('hidden', !running);
+        ui.btns.killSwitch.classList.toggle('hidden', !running);
+    };
+    ui.btns.startBot.onclick = () => { bot.start(); toggleUI(true); };
+    ui.btns.stopBot.onclick = () => { bot.stop(); toggleUI(false); };
+    ui.btns.killSwitch.onclick = () => { bot.stop(); toggleUI(false); showToast('KILL SWITCH ACTIVATED', 'error'); };
+
+    ui.btns.pauseBot.onclick = () => {
+        const isPaused = bot.togglePause();
+        ui.btns.pauseBot.innerHTML = `<i class="fa-solid fa-${isPaused ? 'play' : 'pause'}"></i>`;
+        ui.btns.pauseBot.className = `w-1/3 py-3 rounded font-bold shadow-lg text-sm ${isPaused ? 'bg-green-600 hover:bg-green-500' : 'bg-yellow-600 hover:bg-yellow-500'}`;
+        ui.btns.pauseBot.setAttribute('aria-label', isPaused ? 'Resume Bot' : 'Pause Bot');
+    };
+
+    ui.botSettings.strategy.onchange = () => { bot.updateConfig(ui.botSettings.strategy.value, ui.botSettings.risk.value); renderStrategyParams(ui.botSettings.strategy.value); saveSettings(); };
+    ui.botSettings.risk.onchange = () => { bot.updateConfig(ui.botSettings.strategy.value, ui.botSettings.risk.value); saveSettings(); };
+
+    ['duration', 'stake'].forEach(k => ui.inputs[k].onchange = () => { bot.setDuration(parseInt(ui.inputs.duration.value)); bot.setStake(parseFloat(ui.inputs.stake.value)); saveSettings(); });
+
+    const updateFilters = () => { bot.setFilter(ui.botSettings.useFilter.checked, parseInt(ui.botSettings.adxThreshold.value), ui.botSettings.avoidSqueeze.checked); saveSettings(); };
+    ['useFilter', 'adxThreshold', 'avoidSqueeze'].forEach(k => ui.botSettings[k].onchange = updateFilters);
+
+    ui.botSettings.useAIFilter.onchange = () => { bot.setAIFilter(ui.botSettings.useAIFilter.checked); saveSettings(); };
+    ui.botSettings.autoSelect.onchange = () => { ui.botSettings.autoSelect.checked ? startAutoScanner() : stopAutoScanner(); saveSettings(); };
+
+    const updateMM = () => { bot.setMoneyManagement(ui.botSettings.useMartingale.checked, parseFloat(ui.botSettings.martingaleMultiplier.value), parseFloat(ui.botSettings.takeProfit.value), parseFloat(ui.botSettings.stopLoss.value), ui.botSettings.useSmartRisk.checked); saveSettings(); };
+    ['useMartingale', 'useSmartRisk', 'martingaleMultiplier', 'takeProfit', 'stopLoss'].forEach(k => ui.botSettings[k].onchange = updateMM);
+
+    ui.backtest.runBtn.onclick = runBacktest;
+    ui.btns.exportHistory.onclick = exportHistory;
+    ui.btns.sendSupport.onclick = () => showToast('Message Sent!', 'success');
+    ui.btns.loadChallenge.onclick = () => applyPreset('conservative');
+    document.querySelectorAll('.btn-preset').forEach(btn => btn.onclick = () => applyPreset(btn.dataset.preset));
+
+    const close = () => closeModal();
+    ui.modal.closes.forEach(btn => btn.onclick = close);
+    document.querySelector('.modal-overlay').onclick = close;
+    document.onkeydown = (e) => (e.key === 'Escape' && document.body.classList.contains('modal-active')) && close();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     try {
         initChart();
