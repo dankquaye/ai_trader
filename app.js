@@ -532,7 +532,6 @@ function startAutoScanner() {
     if (scanInterval) clearInterval(scanInterval);
     scanInterval = setInterval(async () => {
         if (!ui.botSettings.autoSelect.checked || !bot.isRunning || bot.hasOpenTrade) return;
-        console.log('Scanning assets...');
         const assets = Array.from(ui.assetSelector.options).map(o => o.value).filter(v => v.startsWith('R_'));
         let bestScore = -1;
         let bestAsset = null;
