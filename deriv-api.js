@@ -155,8 +155,13 @@ class DerivAPI {
         });
     }
 
-    authorize() {
-        this.send({ authorize: this.token });
+    authorize(token) {
+        const t = token || this.token;
+        if (!t) {
+            console.warn('Cannot authorize: No token provided');
+            return;
+        }
+        this.send({ authorize: t });
     }
 
     startPing() {

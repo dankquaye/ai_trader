@@ -998,7 +998,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const type = ui.accountSelector.value || 'demo';
             if (window.DerivConfig[type] && window.DerivConfig[type].token) {
                 console.log('Using pre-loaded configuration for ' + type);
-                api.authorize(window.DerivConfig[type].token);
+                api.setAccountType(type); // Triggers connect() and auto-authorizes on open
             } else {
                 ui.tokenInput.classList.remove('hidden');
                 showToast('Please enter your API Token to connect.', 'info');
