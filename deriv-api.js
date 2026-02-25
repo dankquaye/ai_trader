@@ -25,6 +25,8 @@ class DerivAPI {
         this.pingInterval = null;
         this.latency = 0;
 
+        this.debug = false;
+
         // Credentials
         this.credentials = {
             demo: { appId: 71238, token: '' },
@@ -85,7 +87,7 @@ class DerivAPI {
         }
 
         const url = `wss://ws.binaryws.com/websockets/v3?app_id=${this.appId}`;
-        console.log(`[DerivAPI] Connecting to ${this.accountType}...`);
+        if(this.debug) console.log(`[DerivAPI] Connecting to ${this.accountType}...`);
 
         try {
             this.ws = new WebSocket(url);
@@ -110,7 +112,7 @@ class DerivAPI {
     }
 
     _onOpen() {
-        console.log('[DerivAPI] Connected');
+        if(this.debug) console.log('[DerivAPI] Connected');
         this.isConnected = true;
         this.reconnectAttempts = 0;
 
@@ -119,7 +121,7 @@ class DerivAPI {
     }
 
     _onClose() {
-        console.log('[DerivAPI] Disconnected');
+        if(this.debug) console.log('[DerivAPI] Disconnected');
         this.isConnected = false;
         this._stopPing();
         if (this.shouldReconnect) {
@@ -138,7 +140,7 @@ class DerivAPI {
         }
 
         const delay = this.baseReconnectDelay * Math.pow(2, this.reconnectAttempts);
-        console.log(`[DerivAPI] Reconnecting in ${delay}ms (Attempt ${this.reconnectAttempts + 1}/${this.maxReconnectAttempts})...`);
+        if(this.debug) console.log(`[DerivAPI] Reconnecting in ${delay}ms (Attempt ${this.reconnectAttempts + 1}/${this.maxReconnectAttempts})...`);
 
         this.reconnectAttempts++;
         setTimeout(() => this.connect(), delay);
@@ -182,7 +184,7 @@ class DerivAPI {
 
             // Internal Handling
             if (type === 'authorize') {
-                console.log(`[DerivAPI] Authorized: ${data.authorize.email}`);
+                if(this.debug) console.log(`[DerivAPI] Authorized: ${data.authorize.email}`);
                 this._restoreSubscriptions(); // Restore state after auth
                 this._startPing();
             }

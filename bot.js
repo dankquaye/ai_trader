@@ -39,6 +39,9 @@ class TradingBot {
 
         // --- Watchdog ---
         this.watchdogTimer = null;
+
+        // --- Debug ---
+        this.debug = false;
     }
 
     // ============================================================
@@ -210,7 +213,7 @@ class TradingBot {
     // ============================================================
 
     log(msg) {
-        console.log(`[BOT] ${msg}`);
+        if (this.debug) console.log(`[BOT] ${msg}`);
         if(document.getElementById('bot-logs')) {
             const d = document.createElement('div');
             d.innerText = msg;
