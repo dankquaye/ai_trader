@@ -819,7 +819,15 @@ function showToast(message, type = 'info') {
     if (type === 'success') colorClass = 'bg-green-600';
 
     toast.className = `${colorClass} text-white px-6 py-3 rounded shadow-lg toast flex items-center mb-2 transition-all duration-300`;
-    toast.innerHTML = `<i class="fa-solid ${type === 'error' ? 'fa-circle-exclamation' : 'fa-circle-info'} mr-2"></i><span>${message}</span>`;
+
+    // Secure way to add content
+    const icon = document.createElement('i');
+    icon.className = `fa-solid ${type === 'error' ? 'fa-circle-exclamation' : 'fa-circle-info'} mr-2`;
+    toast.appendChild(icon);
+
+    const span = document.createElement('span');
+    span.textContent = message;
+    toast.appendChild(span);
 
     container.appendChild(toast);
     activeToasts.push(toast);
