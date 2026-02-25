@@ -1012,15 +1012,32 @@ class TradingBot {
         return rsi;
     }
     calculateBollingerBands(data, period, stdDev) {
-        const sma = this.calculateSMA(data, period);
-        return data.map((val, i) => {
-            if (i < period) return { upper: 0, lower: 0, middle: 0 };
-            const slice = data.slice(i - period + 1, i + 1);
-            const mean = sma[i];
-            const sumSq = slice.reduce((a, b) => a + Math.pow(b - mean, 2), 0);
-            const sd = Math.sqrt(sumSq / period);
-            return { middle: mean, upper: mean + sd * stdDev, lower: mean - sd * stdDev };
-        });
+        if (!data || data.length === 0) return [];
+        const results = [];
+        let sum = 0;
+        let sumSq = 0;
+
+        for (let i = 0; i < data.length; i++) {
+            const val = data[i];
+            sum += val;
+            sumSq += val * val;
+
+            if (i >= period) {
+                const oldVal = data[i - period];
+                sum -= oldVal;
+                sumSq -= oldVal * oldVal;
+            }
+
+            if (i < period) {
+                results.push({ upper: 0, lower: 0, middle: 0 });
+            } else {
+                const mean = sum / period;
+                const variance = Math.max(0, (sumSq / period) - (mean * mean));
+                const sd = Math.sqrt(variance);
+                results.push({ middle: mean, upper: mean + sd * stdDev, lower: mean - sd * stdDev });
+            }
+        }
+        return results;
     }
     calculateADX(data, period) {
         let tr = [], dmPlus = [], dmMinus = [];
