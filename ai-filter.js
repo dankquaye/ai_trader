@@ -160,17 +160,20 @@ class AIFilter {
 
             let totalAcc = 0;
 
-            // Train Ensemble
-            for (let i = 0; i < this.models.length; i++) {
-                const h = await this.models[i].fit(inputsTensor, labelsTensor, {
-                    epochs: 5,
-                    batchSize: 32,
-                    shuffle: true,
-                    validationSplit: 0.1
-                });
+            // Train Ensemble (Parallelized)
+            const trainPromises = this.models.map(model => model.fit(inputsTensor, labelsTensor, {
+                epochs: 5,
+                batchSize: 32,
+                shuffle: true,
+                validationSplit: 0.1
+            }));
+
+            const histories = await Promise.all(trainPromises);
+
+            histories.forEach(h => {
                 const acc = h.history.val_acc ? h.history.val_acc[h.history.val_acc.length-1] : h.history.acc[h.history.acc.length-1];
                 totalAcc += acc;
-            }
+            });
 
             this.accuracy = (totalAcc / this.models.length) * 100;
 
