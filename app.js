@@ -714,6 +714,50 @@ function aggregateTick(time, price) {
     }
 }
 
+// --- Event Listeners ---
+
+function setupEventListeners() {
+    ui.navBtns.forEach(btn => btn.addEventListener('click', () => {
+        ui.navBtns.forEach(b => b.classList.remove('active')); btn.classList.add('active');
+        ui.pages.forEach(p => p.classList.add('hidden')); document.getElementById(btn.dataset.target).classList.remove('hidden');
+    }));
+    document.querySelectorAll('.btn-preset').forEach(btn => btn.addEventListener('click', () => applyPreset(btn.dataset.preset)));
+
+    // Modal
+    ui.modal.closes.forEach(btn => btn.addEventListener('click', closeModal));
+    const overlay = ui.modal.el.querySelector('.modal-overlay');
+    if(overlay) overlay.addEventListener('click', closeModal);
+    document.addEventListener('keydown', e => { if(e.key === 'Escape') closeModal(); });
+
+    // Bot Controls
+    ui.btns.startBot.addEventListener('click', () => {
+        if(!ui.inputs.stake.value || !ui.inputs.duration.value) return showToast('Check inputs!', 'error');
+        bot.initialStake = parseFloat(ui.inputs.stake.value); bot.duration = parseInt(ui.inputs.duration.value);
+        bot.start(); ui.btns.startBot.classList.add('hidden'); ui.btns.stopBot.classList.remove('hidden'); ui.btns.pauseBot.classList.remove('hidden');
+    });
+    ui.btns.stopBot.addEventListener('click', () => {
+        bot.stop(); ui.btns.stopBot.classList.add('hidden'); ui.btns.startBot.classList.remove('hidden'); ui.btns.pauseBot.classList.add('hidden');
+    });
+    ui.btns.pauseBot.addEventListener('click', () => {
+        const p = bot.togglePause();
+        ui.btns.pauseBot.innerHTML = `<i class="fa-solid fa-${p?'play':'pause'}"></i>`;
+        ui.btns.pauseBot.setAttribute('aria-label', p?'Resume Bot':'Pause Bot');
+    });
+    ui.btns.killSwitch.addEventListener('click', () => { bot.stop(); showToast('EMERGENCY STOP', 'error'); });
+
+    // Misc
+    ui.btns.exportHistory.addEventListener('click', exportHistory);
+    ui.btns.sendSupport.addEventListener('click', () => showToast('Message Sent!', 'success'));
+    if(ui.backtest.runBtn) ui.backtest.runBtn.addEventListener('click', runBacktest);
+    if(ui.btns.loadChallenge) ui.btns.loadChallenge.addEventListener('click', () => { applyPreset('growth'); bot.setSmallAccountMode(true); });
+
+    // Account Type
+    ui.accountSelector.addEventListener('change', () => {
+        bot.setAccountType(ui.accountSelector.value);
+        showToast(`Switched to ${ui.accountSelector.value.toUpperCase()} Account`, 'info');
+    });
+}
+
 // --- API Events ---
 
 function setupApiCallbacks() {
