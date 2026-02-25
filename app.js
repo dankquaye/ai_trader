@@ -184,7 +184,7 @@ async function runBacktest() {
             tr.className = 'border-b border-gray-700';
             const color = t.result === 'WIN' ? 'text-green-400' : 'text-red-400';
             tr.innerHTML = `
-                <td class="px-4 py-2">${t.time}</td>
+                <td class="px-4 py-2">${new Date(t.time * 1000).toLocaleString()}</td>
                 <td class="px-4 py-2">${t.type}</td>
                 <td class="px-4 py-2">${t.entry.toFixed(2)}</td>
                 <td class="px-4 py-2">${t.exit.toFixed(2)}</td>

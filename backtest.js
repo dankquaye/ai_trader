@@ -197,7 +197,7 @@ class Backtester {
 
         // Record Trade
         this.trades.push({
-            time: new Date(this.data[currentIndex].epoch * 1000).toLocaleString(),
+            time: this.data[currentIndex].epoch,
             entryTime: this.data[currentIndex].epoch,
             exitTime: this.data[exitIndex].epoch,
             type: direction,
