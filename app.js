@@ -79,7 +79,7 @@ function bindUI() {
     // Asset Selector
     document.getElementById('asset-selector').addEventListener('change', (e) => {
         const symbol = e.target.value;
-        if(window.bot.isRunning) {
+        if(window.bot.state.isRunning) {
             showToast('Switching Asset...', 'info');
             window.bot.stop();
             window.bot.symbol = symbol;
@@ -153,11 +153,10 @@ function bindUI() {
     window.api.on('balance', (bal) => {
         const b = parseFloat(bal.balance);
         document.getElementById('header-balance').innerText = `$${b.toFixed(2)}`;
-        window.bot.riskManager.balance = b;
+        window.bot.state.balance = b; // Updated path
     });
 
-    // Pass trade events to bot (handled inside API logic but ensure hook exists)
-    // api.js calls window.bot.onTradePlaced directly
+    window.api.on('contract_finish', (c) => window.bot.handleTradeResult(c));
 }
 
 let currentBar = null;
@@ -183,6 +182,7 @@ function startUpdateLoop() {
     setInterval(() => {
         if(!window.bot) return;
         const bot = window.bot;
+        const state = bot.state; // Bot State object
 
         // Connection
         const conn = document.getElementById('connection-status');
@@ -190,26 +190,26 @@ function startUpdateLoop() {
         else conn.className = 'w-3 h-3 rounded-full bg-red-500 animate-pulse';
 
         // Bot Stats
-        safeSetText('debug-state', bot.state);
-        safeSetText('debug-lock', bot.lock ? 'LOCKED' : 'UNLOCKED');
-        safeSetColor('debug-lock', bot.lock ? 'text-red-500' : 'text-green-500');
+        safeSetText('debug-state', state.executionLock ? 'LOCKED' : (state.isRunning ? 'RUNNING' : 'IDLE'));
+        safeSetText('debug-lock', state.executionLock ? 'LOCKED' : 'UNLOCKED');
+        safeSetColor('debug-lock', state.executionLock ? 'text-red-500' : 'text-green-500');
 
-        const cooldown = Math.max(0, Math.ceil((bot.cooldownUntil - Date.now())/1000));
+        const cooldown = Math.max(0, Math.ceil((state.cooldownUntil - Date.now())/1000));
         safeSetText('debug-cooldown', cooldown > 0 ? `${cooldown}s` : 'READY');
 
         // Risk Stats
-        const rm = bot.riskManager;
-        safeSetText('debug-winrate', bot.recentTrades.length > 0
-            ? ((bot.recentTrades.filter(x=>x===1).length / bot.recentTrades.length)*100).toFixed(0) + '%'
+        safeSetText('debug-winrate', state.recentTrades.length > 0
+            ? ((state.recentTrades.filter(x=>x===1).length / state.recentTrades.length)*100).toFixed(0) + '%'
             : '0%');
 
-        safeSetText('debug-dd', '0.0%'); // TODO: Expose PnL % better
-        safeSetText('debug-last-profit', `$${(bot.tradeHistory.length > 0 ? bot.tradeHistory[bot.tradeHistory.length-1].profit.toFixed(2) : '0.00')}`);
+        const dd = state.equityHigh > 0 ? ((state.equityHigh - state.balance)/state.equityHigh * 100) : 0;
+        safeSetText('debug-dd', dd.toFixed(2) + '%');
+        safeSetText('debug-last-profit', `$${(state.tradeHistory.length > 0 ? state.tradeHistory[state.tradeHistory.length-1].profit.toFixed(2) : '0.00')}`);
 
         // Overlay
         safeSetText('overlay-regime', bot.regimeDetector.currentRegime);
-        safeSetText('overlay-confidence', bot.confidenceModel.lastScore + '%');
-        safeSetText('header-profit', `$${bot.totalProfit.toFixed(2)}`);
+        safeSetText('overlay-confidence', bot.confidenceModel ? (bot.confidenceModel.lastScore || 0) + '%' : (bot.reinforcement.getScore('trend_follow')*80).toFixed(0)+'%');
+        safeSetText('header-profit', `$${state.totalProfit.toFixed(2)}`);
 
     }, 200);
 }
