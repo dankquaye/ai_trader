@@ -60,6 +60,11 @@ try {
     bot.processCandle({ epoch: Date.now()/1000, open: 123, high: 124, low: 122, close: 123.5 }, 60);
     console.log('Candle processed.');
 
+    // Verify setParamLock
+    bot.setParamLock(true);
+    if (bot.isParamLocked !== true) throw new Error('setParamLock failed');
+    console.log('setParamLock verified.');
+
     console.log('Bot integrity verification passed.');
 
 } catch (e) {

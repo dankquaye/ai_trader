@@ -565,6 +565,7 @@ class TradingBot {
     setBacktestMode(enabled) { this.isBacktesting = enabled; }
     setAccountType(type) { this.accountType = type; this.log('Account: ' + type); }
     togglePause() { this.isPaused = !this.isPaused; return this.isPaused; }
+    setParamLock(locked) { this.isParamLocked = locked; this.log(`Params ${locked ? 'Locked' : 'Unlocked'}`); }
     log(msg) { console.log('[BOT]', msg); if(document.getElementById('bot-logs')) { const d = document.createElement('div'); d.innerText = msg; document.getElementById('bot-logs').prepend(d); } }
     setStrategyParams(params) {
         if (params.rsiPeriod) this.rsiPeriod = parseInt(params.rsiPeriod);
