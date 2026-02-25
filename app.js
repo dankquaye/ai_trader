@@ -626,52 +626,133 @@ function applyPreset(type) {
     saveSettings();
 }
 
-// --- Modal Logic ---
-
 function openModal(tradeId) {
     const trade = bot.tradeHistory[tradeId];
     if (!trade) return;
     const r = trade.reasoning;
 
-    let html = `
-        <div class="mb-4">
-            <h5 class="font-bold text-gray-400 uppercase text-xs mb-1">Overview</h5>
-            <div class="grid grid-cols-2 gap-2 bg-gray-900 p-2 rounded">
-                <div><span class="text-gray-500">Symbol:</span> ${trade.symbol}</div>
-                <div><span class="text-gray-500">Result:</span> <span class="${trade.profit > 0 ? 'text-green-400' : 'text-red-400'}">${trade.status} ($${trade.profit})</span></div>
-                <div><span class="text-gray-500">Grade:</span> ${trade.grade}</div>
-                <div><span class="text-gray-500">Confidence:</span> ${(r?.finalScore * 100).toFixed(1)}%</div>
-            </div>
-        </div>
-    `;
+    ui.modal.body.innerHTML = ''; // Clear existing content
+
+    // Overview Section
+    const mb4 = document.createElement('div');
+    mb4.className = 'mb-4';
+
+    const h5 = document.createElement('h5');
+    h5.className = 'font-bold text-gray-400 uppercase text-xs mb-1';
+    h5.textContent = 'Overview';
+    mb4.appendChild(h5);
+
+    const grid = document.createElement('div');
+    grid.className = 'grid grid-cols-2 gap-2 bg-gray-900 p-2 rounded';
+
+    const createInfoRow = (label, value, valueClass) => {
+        const div = document.createElement('div');
+        const spanLabel = document.createElement('span');
+        spanLabel.className = 'text-gray-500';
+        spanLabel.textContent = label + ': ';
+        div.appendChild(spanLabel);
+
+        const spanValue = document.createElement('span');
+        if (valueClass) spanValue.className = valueClass;
+        spanValue.textContent = value;
+        div.appendChild(spanValue);
+        return div;
+    };
+
+    grid.appendChild(createInfoRow('Symbol', trade.symbol));
+
+    const resultColor = trade.profit > 0 ? 'text-green-400' : 'text-red-400';
+    grid.appendChild(createInfoRow('Result', `${trade.status} ($${trade.profit})`, resultColor));
+
+    grid.appendChild(createInfoRow('Grade', trade.grade));
+
+    const conf = r ? (r.finalScore * 100).toFixed(1) + '%' : 'N/A';
+    grid.appendChild(createInfoRow('Confidence', conf));
+
+    mb4.appendChild(grid);
+    ui.modal.body.appendChild(mb4);
 
     if (r) {
-        html += `
-            <div class="mb-4">
-                <h5 class="font-bold text-gray-400 uppercase text-xs mb-1">Engine Scores</h5>
-                <div class="space-y-1 text-xs">
-                    <div class="flex justify-between border-b border-gray-700 pb-1"><span>Trend Engine</span><span class="font-mono ${r.trend?.buy > 0.5 ? 'text-green-400' : 'text-red-400'}">B:${(r.trend?.buy*100).toFixed(0)}% S:${(r.trend?.sell*100).toFixed(0)}%</span></div>
-                    <div class="flex justify-between border-b border-gray-700 pb-1"><span>Momentum Engine</span><span class="font-mono ${r.momentum?.buy > 0.5 ? 'text-green-400' : 'text-red-400'}">B:${(r.momentum?.buy*100).toFixed(0)}% S:${(r.momentum?.sell*100).toFixed(0)}%</span></div>
-                    <div class="flex justify-between border-b border-gray-700 pb-1"><span>Volatility Engine</span><span class="font-mono text-blue-400">${(r.volatility || 0).toFixed(2)}</span></div>
-                    <div class="flex justify-between border-b border-gray-700 pb-1"><span>Noise Engine</span><span class="font-mono text-purple-400">${(r.noise || 0).toFixed(2)}</span></div>
-                </div>
-            </div>
-        `;
+        const mb4Engine = document.createElement('div');
+        mb4Engine.className = 'mb-4';
+
+        const h5Engine = document.createElement('h5');
+        h5Engine.className = 'font-bold text-gray-400 uppercase text-xs mb-1';
+        h5Engine.textContent = 'Engine Scores';
+        mb4Engine.appendChild(h5Engine);
+
+        const spaceY = document.createElement('div');
+        spaceY.className = 'space-y-1 text-xs';
+
+        const createEngineRow = (name, valueText, valueClass) => {
+            const div = document.createElement('div');
+            div.className = 'flex justify-between border-b border-gray-700 pb-1';
+            const spanName = document.createElement('span');
+            spanName.textContent = name;
+            div.appendChild(spanName);
+
+            const spanValue = document.createElement('span');
+            spanValue.className = 'font-mono ' + (valueClass || '');
+            spanValue.textContent = valueText;
+            div.appendChild(spanValue);
+            return div;
+        };
+
+        const trendText = `B:${(r.trend?.buy*100).toFixed(0)}% S:${(r.trend?.sell*100).toFixed(0)}%`;
+        const trendClass = r.trend?.buy > 0.5 ? 'text-green-400' : 'text-red-400';
+        spaceY.appendChild(createEngineRow('Trend Engine', trendText, trendClass));
+
+        const momText = `B:${(r.momentum?.buy*100).toFixed(0)}% S:${(r.momentum?.sell*100).toFixed(0)}%`;
+        const momClass = r.momentum?.buy > 0.5 ? 'text-green-400' : 'text-red-400';
+        spaceY.appendChild(createEngineRow('Momentum Engine', momText, momClass));
+
+        const volText = (r.volatility || 0).toFixed(2);
+        spaceY.appendChild(createEngineRow('Volatility Engine', volText, 'text-blue-400'));
+
+        const noiseText = (r.noise || 0).toFixed(2);
+        spaceY.appendChild(createEngineRow('Noise Engine', noiseText, 'text-purple-400'));
+
+        mb4Engine.appendChild(spaceY);
+        ui.modal.body.appendChild(mb4Engine);
+
         if (r.ai) {
-             html += `<div class="mb-4"><h5 class="font-bold text-gray-400 uppercase text-xs mb-1">AI Insight</h5><div class="bg-gray-900 p-2 rounded text-xs space-y-1"><div class="flex justify-between"><span>Prediction:</span><span class="${r.ai.buy > 0.5 ? 'text-green-400' : 'text-red-400'} font-bold">${r.ai.buy > 0.5 ? 'RISE' : 'FALL'} (${(Math.max(r.ai.buy, r.ai.sell)*100).toFixed(1)}%)</span></div></div></div>`;
+             const mb4AI = document.createElement('div');
+             mb4AI.className = 'mb-4';
+
+             const h5AI = document.createElement('h5');
+             h5AI.className = 'font-bold text-gray-400 uppercase text-xs mb-1';
+             h5AI.textContent = 'AI Insight';
+             mb4AI.appendChild(h5AI);
+
+             const bg = document.createElement('div');
+             bg.className = 'bg-gray-900 p-2 rounded text-xs space-y-1';
+
+             const flex = document.createElement('div');
+             flex.className = 'flex justify-between';
+
+             const spanPred = document.createElement('span');
+             spanPred.textContent = 'Prediction:';
+             flex.appendChild(spanPred);
+
+             const spanVal = document.createElement('span');
+             const isBuy = r.ai.buy > 0.5;
+             spanVal.className = (isBuy ? 'text-green-400' : 'text-red-400') + ' font-bold';
+             spanVal.textContent = `${isBuy ? 'RISE' : 'FALL'} (${(Math.max(r.ai.buy, r.ai.sell)*100).toFixed(1)}%)`;
+             flex.appendChild(spanVal);
+
+             bg.appendChild(flex);
+             mb4AI.appendChild(bg);
+             ui.modal.body.appendChild(mb4AI);
         }
     } else {
-        html += `<p class="text-gray-500 italic">Detailed reasoning not available for this trade.</p>`;
+        const p = document.createElement('p');
+        p.className = 'text-gray-500 italic';
+        p.textContent = 'Detailed reasoning not available for this trade.';
+        ui.modal.body.appendChild(p);
     }
 
-    ui.modal.body.innerHTML = html;
     document.body.classList.add('modal-active');
     ui.modal.el.classList.remove('opacity-0', 'pointer-events-none');
-}
-
-function closeModal() {
-    document.body.classList.remove('modal-active');
-    ui.modal.el.classList.add('opacity-0', 'pointer-events-none');
 }
 
 window.updateTradeHistory = (history, totalProfit, wins, losses) => {
@@ -687,15 +768,35 @@ window.updateTradeHistory = (history, totalProfit, wins, losses) => {
         const color = trade.profit >= 0 ? 'text-green-400' : 'text-red-400';
         const gradeColor = trade.grade?.startsWith('A') ? 'text-green-400' : (trade.grade === 'F' ? 'text-red-500' : 'text-gray-400');
 
-        tr.innerHTML = `
-            <td class="px-6 py-4">${trade.time}</td>
-            <td class="px-6 py-4">${trade.symbol}</td>
-            <td class="px-6 py-4">${trade.type}</td>
-            <td class="px-6 py-4">$${trade.stake}</td>
-            <td class="px-6 py-4 font-bold ${color}">$${trade.profit.toFixed(2)}</td>
-            <td class="px-6 py-4 font-bold ${gradeColor}">${trade.grade || '-'}</td>
-            <td class="px-6 py-4"><button class="text-xs bg-blue-900 text-blue-300 px-2 py-1 rounded hover:bg-blue-800" onclick="event.stopPropagation(); openModal(${originalIndex})"><i class="fa-solid fa-magnifying-glass"></i> Details</button></td>
-        `;
+        const createCell = (text, className) => {
+            const td = document.createElement('td');
+            td.className = className || 'px-6 py-4';
+            td.textContent = text;
+            return td;
+        };
+
+        tr.appendChild(createCell(trade.time, 'px-6 py-4'));
+        tr.appendChild(createCell(trade.symbol, 'px-6 py-4'));
+        tr.appendChild(createCell(trade.type, 'px-6 py-4'));
+        tr.appendChild(createCell('$' + trade.stake, 'px-6 py-4'));
+        tr.appendChild(createCell('$' + trade.profit.toFixed(2), `px-6 py-4 font-bold ${color}`));
+        tr.appendChild(createCell(trade.grade || '-', `px-6 py-4 font-bold ${gradeColor}`));
+
+        const tdDetails = document.createElement('td');
+        tdDetails.className = 'px-6 py-4';
+        const btnDetails = document.createElement('button');
+        btnDetails.className = 'text-xs bg-blue-900 text-blue-300 px-2 py-1 rounded hover:bg-blue-800';
+        btnDetails.onclick = (event) => {
+            event.stopPropagation();
+            openModal(originalIndex);
+        };
+        const icon = document.createElement('i');
+        icon.className = 'fa-solid fa-magnifying-glass';
+        btnDetails.appendChild(icon);
+        btnDetails.appendChild(document.createTextNode(' Details'));
+        tdDetails.appendChild(btnDetails);
+        tr.appendChild(tdDetails);
+
         tr.onclick = () => openModal(originalIndex);
         ui.historyTable.appendChild(tr);
     });
@@ -819,7 +920,14 @@ function showToast(message, type = 'info') {
     if (type === 'success') colorClass = 'bg-green-600';
 
     toast.className = `${colorClass} text-white px-6 py-3 rounded shadow-lg toast flex items-center mb-2 transition-all duration-300`;
-    toast.innerHTML = `<i class="fa-solid ${type === 'error' ? 'fa-circle-exclamation' : 'fa-circle-info'} mr-2"></i><span>${message}</span>`;
+
+    const icon = document.createElement('i');
+    icon.className = `fa-solid ${type === 'error' ? 'fa-circle-exclamation' : 'fa-circle-info'} mr-2`;
+    toast.appendChild(icon);
+
+    const span = document.createElement('span');
+    span.textContent = message;
+    toast.appendChild(span);
 
     container.appendChild(toast);
     activeToasts.push(toast);
