@@ -11,6 +11,7 @@
 class TradingBot {
     constructor(api) {
         this.api = api;
+        this._indicatorCache = null;
 
         // --- State Flags ---
         this.isRunning = false;
@@ -925,19 +926,38 @@ class TradingBot {
     // ============================================================
 
     extractFeatures(index) {
-        const closes = this.candles1m.map(c => c.close);
-        if (index < 30 || index >= closes.length) return null;
+        if (index < 30 || index >= this.candles1m.length) return null;
 
-        // Note: For performance, this recalculates entire array.
-        // In a highly optimized version, we would maintain rolling buffers.
-        const indicators = {
-            rsi: this.calculateRSI(closes, 14),
-            adx: this.calculateADX(closes, 14),
-            sma: this.calculateSMA(closes, 20),
-            bb: this.calculateBollingerBands(closes, 20, 2),
-            macd: this.calculateMACD(closes, 12, 26, 9).histogram,
-            atr: this.calculateATR(this.candles1m, 14)
-        };
+        let indicators;
+        const lastCandle = this.candles1m[this.candles1m.length - 1];
+
+        // Check if cache is valid
+        if (this._indicatorCache &&
+            this._indicatorCache.lastTime === lastCandle.time &&
+            this._indicatorCache.length === this.candles1m.length &&
+            this._indicatorCache.lastClose === lastCandle.close) {
+
+            indicators = this._indicatorCache.data;
+        } else {
+            const closes = this.candles1m.map(c => c.close);
+
+            // Recompute and cache
+            indicators = {
+                rsi: this.calculateRSI(closes, 14),
+                adx: this.calculateADX(closes, 14),
+                sma: this.calculateSMA(closes, 20),
+                bb: this.calculateBollingerBands(closes, 20, 2),
+                macd: this.calculateMACD(closes, 12, 26, 9).histogram,
+                atr: this.calculateATR(this.candles1m, 14)
+            };
+
+            this._indicatorCache = {
+                lastTime: lastCandle.time,
+                lastClose: lastCandle.close,
+                length: this.candles1m.length,
+                data: indicators
+            };
+        }
 
         const c = this.candles1m[index];
         const rsiVal = indicators.rsi[index] / 100;
@@ -951,8 +971,7 @@ class TradingBot {
         const rsiSlope = (indicators.rsi[index] - indicators.rsi[index-3]) / 3 / 10;
         const atrVal = (indicators.atr[index] / c.close) * 100;
 
-        return [rsiVal, adxVal, smaDiff, bbWidth, logRet, macdVal, rsiSlope, atrVal];
-    }
+        return [rsiVal, adxVal, smaDiff, bbWidth, logRet, macdVal, rsiSlope, atrVal];}
 
     extractSequence(index, steps) {
         if (index < steps + 30) return null;
