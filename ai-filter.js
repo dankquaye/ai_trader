@@ -207,11 +207,34 @@ class AIFilter {
         if (!this.isTrained || this.driftDetected) return null;
         if (!sequence || sequence.length !== this.lookBack) return null;
 
-        return tf.tidy(() => {
-            const input = tf.tensor3d([sequence]); // [1, LookBack, Feat]
+        let predictionTensors = [];
+        let regimeTensor = null;
 
-            // 1. Ensemble Voting
-            const predictions = this.models.map(m => m.predict(input).dataSync()[0]);
+        try {
+            // Tensors are created inside tidy, but prediction tensors are returned out
+            // to allow async .data() access without blocking GPU.
+            const tensors = tf.tidy(() => {
+                const input = tf.tensor3d([sequence]); // [1, LookBack, Feat]
+
+                // 1. Ensemble Voting
+                const preds = this.models.map(m => m.predict(input));
+
+                // 3. Regime Classification (using last timestep)
+                const lastStep = tf.tensor2d([sequence[sequence.length-1]]);
+                const reg = this.regimeModel.predict(lastStep);
+
+                return { preds, reg };
+            });
+
+            predictionTensors = tensors.preds;
+            regimeTensor = tensors.reg;
+
+            // Fetch data asynchronously (non-blocking)
+            const predictionsArrays = await Promise.all(predictionTensors.map(t => t.data()));
+            const regimeProbsArray = await regimeTensor.data();
+
+            // Extract values
+            const predictions = predictionsArrays.map(arr => arr[0]);
 
             // Average Probability
             const avgProb = predictions.reduce((a, b) => a + b, 0) / predictions.length;
@@ -227,9 +250,7 @@ class AIFilter {
             const agreement = Math.max(0, 1 - (stdDev * 2)); // 0 to 1
             const confidence = (signalStrength * 0.7) + (agreement * 0.3);
 
-            // 3. Regime Classification (using last timestep)
-            const lastStep = tf.tensor2d([sequence[sequence.length-1]]);
-            const regimeProbs = this.regimeModel.predict(lastStep).dataSync();
+            const regimeProbs = regimeProbsArray;
             const regimeIndex = regimeProbs.indexOf(Math.max(...regimeProbs));
             const regimes = ['Uptrend', 'Downtrend', 'Ranging', 'Volatile'];
 
@@ -253,7 +274,16 @@ class AIFilter {
                 rlAction: rlAction,
                 rawPredictions: predictions
             };
-        });
+
+        } finally {
+            // Manual cleanup required for tensors escaped from tidy
+            if (predictionTensors) {
+                predictionTensors.forEach(t => t.dispose());
+            }
+            if (regimeTensor) {
+                regimeTensor.dispose();
+            }
+        }
     }
 
     // --- Reinforcement Learning Integration ---
