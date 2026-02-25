@@ -1,73 +1,69 @@
+// verification/test_bot_integrity.js - Institutional Integrity Check
+
 const fs = require('fs');
 const vm = require('vm');
 
-// Mock Browser Environment
+// Mocks
 const window = {
     console: console,
     document: {
         getElementById: () => ({ prepend: () => {} }),
         createElement: (tag) => ({ innerText: '' })
     },
-    botBalance: 1000,
-    updateTradeHistory: () => {}
+    updateTradeHistory: () => {},
+    DerivConfig: {}
 };
 const document = window.document;
 
-// Mock DerivAPI
-class DerivAPI {
-    constructor() { this.pendingTrade = false; }
-    placeTrade() { console.log('Mock: Trade Placed'); }
+class WebSocket {
+    constructor(url) {}
+    send(data) {}
+    close() {}
 }
+global.WebSocket = WebSocket;
 
-// Load bot.js source
-const botSource = fs.readFileSync('bot.js', 'utf8');
+// Load Sources
+const load = (file) => fs.readFileSync(file, 'utf8');
+const sources = [
+    load('deriv-api.js'),
+    load('bot.js')
+];
 
 // Sandbox
-const sandbox = { window, document, console, DerivAPI };
+const sandbox = { window, document, console, WebSocket, setTimeout, clearTimeout, Date };
 vm.createContext(sandbox);
 
-// Execute bot.js
 try {
-    vm.runInContext(botSource, sandbox);
-    console.log('bot.js loaded successfully.');
-} catch (e) {
-    console.error('Error loading bot.js:', e);
-    process.exit(1);
-}
+    sources.forEach(src => vm.runInContext(src, sandbox));
+    console.log('[TEST] Sources loaded.');
 
-// Instantiate and Test
-try {
-    // Access TradingBot through the window object in the sandbox
-    const TradingBot = sandbox.window.TradingBot;
+    const { DerivAPI, TradingBot } = sandbox.window;
 
-    if (!TradingBot) {
-        throw new Error('TradingBot not found on window object');
-    }
-
+    // 1. Instantiation
     const api = new DerivAPI();
     const bot = new TradingBot(api);
+    console.log('[TEST] Instantiated Bot & API.');
 
-    console.log('TradingBot instantiated.');
+    // 2. Risk Manager Check
+    if(!bot.riskManager) throw new Error('RiskManager missing');
+    if(bot.riskManager.calculateStake(80, []) <= 0) throw new Error('RiskManager stake calc failed');
+    console.log('[TEST] RiskManager verified.');
 
+    // 3. Regime Detector
+    bot.memory.ticks = [100, 100.1, 100.2, 100.3, 100.4, 100.5, 100.6]; // Trendish
+    bot.regimeDetector.update(bot.memory.ticks, []);
+    console.log(`[TEST] Regime: ${bot.regimeDetector.currentRegime}`);
+
+    // 4. Execution Lock
     bot.start();
-    console.log('Bot started.');
+    bot._executeTrade('rise', 10);
+    if(!bot.lock) throw new Error('Execution Lock failed to engage');
+    if(bot.state !== 'PROPOSAL') throw new Error('State Machine failed');
+    console.log('[TEST] Execution Lock verified.');
 
-    // Mock Tick
-    bot.processTick({ symbol: 'R_100', quote: 123.45, epoch: Date.now()/1000 });
-    console.log('Tick processed.');
-
-    // Mock Candle
-    bot.processCandle({ epoch: Date.now()/1000, open: 123, high: 124, low: 122, close: 123.5 }, 60);
-    console.log('Candle processed.');
-
-    // Verify setParamLock
-    bot.setParamLock(true);
-    if (bot.isParamLocked !== true) throw new Error('setParamLock failed');
-    console.log('setParamLock verified.');
-
-    console.log('Bot integrity verification passed.');
+    console.log('[SUCCESS] Institutional Integrity Verified.');
 
 } catch (e) {
-    console.error('Runtime Verification Failed:', e);
+    console.error('[FAIL]', e);
     process.exit(1);
 }

@@ -3,542 +3,210 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Trading Robot - Deriv</title>
+    <title>Deriv Elite Bot - Institutional Grade</title>
     <!-- Tailwind CSS -->
     <link href="dist/output.css" rel="stylesheet">
     <!-- Lightweight Charts v4.0.1 -->
     <script src="https://unpkg.com/lightweight-charts@4.0.1/dist/lightweight-charts.standalone.production.js" crossorigin="anonymous"></script>
-    <!-- TensorFlow.js -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
     <!-- FontAwesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        .modal {
-            transition: opacity 0.25s ease;
-        }
-        .modal.pointer-events-none,
-        .modal.pointer-events-none * {
-            pointer-events: none;
-        }
-        body.modal-active {
-            overflow-x: hidden;
-            overflow-y: visible !important;
-        }
+        .modal { transition: opacity 0.25s ease; }
+        .modal.pointer-events-none { pointer-events: none; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
     </style>
 </head>
-<body class="bg-gray-900 text-white font-sans h-screen flex flex-col overflow-hidden supports-[height:100dvh]:h-[100dvh]">
-
-    <!-- Loading Overlay -->
-    <div id="loading-overlay" class="fixed inset-0 bg-gray-900 z-[100] flex flex-col items-center justify-center transition-opacity duration-500">
-        <i class="fa-solid fa-robot text-blue-500 text-5xl mb-4 animate-bounce"></i>
-        <h2 class="text-2xl font-bold text-white mb-2">Deriv AI Bot</h2>
-        <p class="text-gray-400 text-sm animate-pulse">Initializing Systems...</p>
-    </div>
+<body class="bg-gray-950 text-gray-200 font-sans h-screen flex flex-col overflow-hidden">
 
     <!-- Header -->
-    <header class="bg-gray-800 p-4 flex justify-between items-center border-b border-gray-700 shrink-0">
-        <div class="flex items-center space-x-2">
-            <i class="fa-solid fa-robot text-blue-500 text-2xl"></i>
-            <h1 class="text-xl font-bold hidden sm:block">Deriv AI Bot</h1>
-            <h1 class="text-xl font-bold sm:hidden">Bot</h1>
+    <header class="bg-gray-900 border-b border-gray-800 p-4 flex justify-between items-center shrink-0 shadow-md z-20">
+        <div class="flex items-center space-x-3">
+            <i class="fa-solid fa-robot text-blue-500 text-2xl animate-pulse"></i>
+            <h1 class="text-lg font-bold tracking-wide">ELITE <span class="text-blue-500">EXECUTION</span></h1>
         </div>
         <div class="flex items-center space-x-4">
-            <!-- Kill Switch -->
-            <button id="btn-kill-switch" class="bg-red-700 hover:bg-red-600 text-white text-xs font-bold px-3 py-1 rounded shadow animate-pulse hidden" title="EMERGENCY STOP">
-                <i class="fa-solid fa-skull-crossbones mr-1"></i> KILL
-            </button>
-
-            <!-- Connection Status -->
-            <div id="connection-status" class="w-3 h-3 rounded-full bg-red-500 animate-pulse" title="Disconnected"></div>
-
-            <div id="balance-display" class="font-mono text-green-400 font-bold text-sm sm:text-base">Checking...</div>
-            <div class="flex items-center space-x-2">
-                <input type="password" id="api-token-input" placeholder="Enter API Token" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs w-24 sm:w-32 focus:outline-none focus:border-blue-500 hidden">
-                <select id="account-selector" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs sm:text-sm focus:outline-none focus:border-blue-500 max-w-[120px] sm:max-w-none">
-                    <option value="demo">Demo</option>
-                    <option value="live">Live</option>
-                </select>
+            <!-- Stats -->
+            <div class="hidden md:flex space-x-4 text-xs font-mono">
+                <div class="flex flex-col items-end">
+                    <span class="text-gray-500">BALANCE</span>
+                    <span id="header-balance" class="text-green-400 font-bold">$0.00</span>
+                </div>
+                <div class="flex flex-col items-end">
+                    <span class="text-gray-500">PROFIT</span>
+                    <span id="header-profit" class="text-gray-300">$0.00</span>
+                </div>
             </div>
+
+            <!-- Connection -->
+            <div id="connection-status" class="w-3 h-3 rounded-full bg-red-500" title="Disconnected"></div>
+
+            <!-- Controls -->
+            <select id="account-selector" class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs focus:outline-none focus:border-blue-500">
+                <option value="demo">Demo</option>
+                <option value="live">Live</option>
+            </select>
+            <input type="password" id="api-token-input" placeholder="API Token" class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs w-24 hidden focus:outline-none focus:border-blue-500">
         </div>
     </header>
 
-    <div class="flex flex-1 flex-col md:flex-row overflow-hidden relative">
-        <!-- Sidebar / Bottom Nav -->
-        <nav class="order-last md:order-first w-full md:w-20 h-16 md:h-full bg-gray-800 flex flex-row md:flex-col justify-around md:justify-start items-center py-1 md:py-4 md:space-y-8 border-t md:border-t-0 md:border-r border-gray-700 z-10 shrink-0">
-            <button class="nav-btn active" data-target="platform">
-                <i class="fa-solid fa-chart-line text-xl mb-1"></i>
-                <span class="text-[10px] md:text-xs">Trade</span>
+    <div class="flex flex-1 overflow-hidden relative">
+
+        <!-- Sidebar -->
+        <nav class="w-16 bg-gray-900 border-r border-gray-800 flex flex-col items-center py-4 space-y-6 z-10 shrink-0">
+            <button class="nav-btn active group relative" data-target="dashboard">
+                <i class="fa-solid fa-chart-line text-xl group-hover:text-blue-400 transition"></i>
+                <span class="absolute left-14 bg-gray-800 text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap border border-gray-700">Dashboard</span>
             </button>
-            <button class="nav-btn" data-target="ai-robot">
-                <i class="fa-solid fa-brain text-xl mb-1"></i>
-                <span class="text-[10px] md:text-xs">Auto</span>
+            <button class="nav-btn group relative" data-target="settings">
+                <i class="fa-solid fa-sliders text-xl group-hover:text-blue-400 transition"></i>
+                <span class="absolute left-14 bg-gray-800 text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap border border-gray-700">Config</span>
             </button>
-            <button class="nav-btn" data-target="backtest">
-                <i class="fa-solid fa-flask text-xl mb-1"></i>
-                <span class="text-[10px] md:text-xs">Test</span>
-            </button>
-            <button class="nav-btn" data-target="history">
-                <i class="fa-solid fa-clock-rotate-left text-xl mb-1"></i>
-                <span class="text-[10px] md:text-xs">History</span>
-            </button>
-            <button class="nav-btn" data-target="profile">
-                <i class="fa-solid fa-user text-xl mb-1"></i>
-                <span class="text-[10px] md:text-xs">Profile</span>
-            </button>
-            <button class="nav-btn" data-target="support">
-                <i class="fa-solid fa-headset text-xl mb-1"></i>
-                <span class="text-[10px] md:text-xs">Help</span>
+            <button class="nav-btn group relative" data-target="logs">
+                <i class="fa-solid fa-terminal text-xl group-hover:text-blue-400 transition"></i>
+                <span class="absolute left-14 bg-gray-800 text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap border border-gray-700">Logs</span>
             </button>
         </nav>
 
         <!-- Main Content -->
-        <main class="flex-1 relative bg-gray-900 overflow-y-auto order-first md:order-last">
+        <main class="flex-1 relative bg-black">
 
-            <!-- Platform Section -->
-            <section id="platform" class="page-section absolute inset-0 flex flex-col">
-                <!-- Asset Selector & Chart Header -->
-                <div class="bg-gray-800 p-2 flex space-x-4 border-b border-gray-700 shrink-0">
-                    <select id="asset-selector" class="bg-gray-700 rounded px-3 py-1 text-sm w-full md:w-auto">
-                        <optgroup label="Volatility Indices">
-                            <option value="R_100" selected>Volatility 100 Index</option>
-                            <option value="R_75">Volatility 75 Index</option>
-                            <option value="R_50">Volatility 50 Index</option>
-                            <option value="R_25">Volatility 25 Index</option>
-                            <option value="R_10">Volatility 10 Index</option>
-                        </optgroup>
-                    </select>
-                </div>
-
-                <!-- Chart Container -->
-                <div id="chart-container" class="flex-1 bg-black relative w-full h-full min-h-[200px]"></div>
-
-                <!-- Trading Controls -->
-                <div class="bg-gray-800 p-4 border-t border-gray-700 grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 items-end shrink-0">
-                    <!-- Time -->
-                    <div class="flex flex-col">
-                        <label class="text-xs text-gray-400 mb-1">Duration (t)</label>
-                        <input type="number" id="duration" value="5" min="1" max="10" class="bg-gray-700 rounded px-2 py-2 text-center font-bold">
-                    </div>
-                    <!-- Amount -->
-                    <div class="flex flex-col">
-                        <label class="text-xs text-gray-400 mb-1">Stake ($)</label>
-                        <input type="number" id="stake" value="10" min="0.35" step="0.5" class="bg-gray-700 rounded px-2 py-2 text-center font-bold">
-                    </div>
-                    <!-- Buttons -->
-                    <button id="btn-rise" class="bg-green-600 hover:bg-green-500 text-white font-bold py-3 rounded shadow-lg transition transform active:scale-95">
-                        <i class="fa-solid fa-arrow-trend-up mr-2"></i> RISE
-                    </button>
-                    <button id="btn-fall" class="bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded shadow-lg transition transform active:scale-95">
-                        <i class="fa-solid fa-arrow-trend-down mr-2"></i> FALL
-                    </button>
-                </div>
-            </section>
-
-            <!-- AI Robot Section -->
-            <section id="ai-robot" class="page-section hidden absolute inset-0 p-4 md:p-8 overflow-y-auto">
-                <h2 class="text-xl md:text-2xl font-bold mb-6">AI Configuration</h2>
-
-                <!-- Quick Setup Menu -->
-                <div class="bg-gray-800 p-4 md:p-6 rounded-lg shadow-lg mb-6 border border-blue-600/30">
-                    <h3 class="text-lg md:text-xl font-bold text-blue-400 mb-4">
-                        <i class="fa-solid fa-wand-magic-sparkles mr-2"></i>One Click Setup
-                    </h3>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <button class="btn-preset bg-green-700 hover:bg-green-600 text-white py-2 rounded font-bold text-sm shadow transition transform active:scale-95 flex flex-col items-center justify-center p-2" data-preset="conservative">
-                            <span>Conservative AI</span>
-                            <span class="text-[10px] text-green-200 font-normal mt-1">Low Risk • High Accuracy</span>
-                        </button>
-                        <button class="btn-preset bg-blue-700 hover:bg-blue-600 text-white py-2 rounded font-bold text-sm shadow transition transform active:scale-95 flex flex-col items-center justify-center p-2" data-preset="balanced">
-                            <span>Balanced AI</span>
-                            <span class="text-[10px] text-blue-200 font-normal mt-1">Smart Risk • Dynamic</span>
-                        </button>
-                        <button class="btn-preset bg-purple-700 hover:bg-purple-600 text-white py-2 rounded font-bold text-sm shadow transition transform active:scale-95 flex flex-col items-center justify-center p-2" data-preset="growth">
-                            <span>Growth AI</span>
-                            <span class="text-[10px] text-purple-200 font-normal mt-1">Aggressive • Frequent</span>
-                        </button>
-                    </div>
-
-                    <!-- Small Account (Legacy/Specific) -->
-                    <div class="mt-4 pt-3 border-t border-gray-700 flex justify-between items-center">
-                         <span class="text-xs text-gray-400"><i class="fa-solid fa-trophy text-yellow-500 mr-1"></i> Small Account Challenge ($10-$50)</span>
-                         <button id="btn-load-challenge" class="text-yellow-500 hover:text-yellow-400 text-xs font-bold underline">Load Preset</button>
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8 pb-20 md:pb-0"> <!-- Padding for bottom nav on mobile -->
-                    <!-- Strategy -->
-                    <div class="bg-gray-800 p-4 md:p-6 rounded-lg shadow-lg">
-                        <h3 class="text-lg md:text-xl font-bold mb-4 text-blue-400">Strategy</h3>
-                        <div class="space-y-4">
-                            <div>
-                                <label class="block text-sm text-gray-400 mb-1">Strategy Type</label>
-                                <select id="bot-strategy" class="w-full bg-gray-700 rounded px-3 py-2 text-sm">
-                                    <option value="ultra_instinct">Multi-Timeframe PA (Ultra)</option>
-                                    <option value="quantum">Quantum Entanglement</option>
-                                    <option value="dynamic">Dynamic (Auto-Switch)</option>
-                                    <option value="neural">Neural Adaptive Trend</option>
-                                    <option value="rsi">RSI Reversal</option>
-                                    <option value="bb">Bollinger Bands (Reversal)</option>
-                                    <option value="sma">SMA Crossover</option>
-                                    <option value="random">Random Walk (Test)</option>
-                                </select>
-                            </div>
-
-                            <!-- Dynamic Parameters -->
-                            <div id="strategy-params" class="space-y-3 pt-2 border-t border-gray-700 hidden">
-                                <!-- Injected by app.js -->
-                            </div>
-
-                            <div>
-                                <label class="block text-sm text-gray-400 mb-1">Risk Level</label>
-                                <select id="bot-risk" class="w-full bg-gray-700 rounded px-3 py-2 text-sm">
-                                    <option value="low">Low (Conservative)</option>
-                                    <option value="medium" selected>Medium (Balanced)</option>
-                                    <option value="high">High (Aggressive)</option>
-                                </select>
-                            </div>
-
-                            <div class="flex items-center justify-between mt-2">
-                                <label class="text-sm text-gray-400" title="Adjust duration based on market volatility">Dynamic Duration</label>
-                                <input type="checkbox" id="use-dynamic-duration" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-blue-600">
-                            </div>
-
-                            <!-- Enhanced Filter Settings -->
-                             <div class="space-y-2 border-t border-gray-700 pt-3 mt-2">
-                                <h4 class="text-xs font-bold text-gray-500 uppercase">Filters</h4>
-                                <div class="flex items-center justify-between">
-                                    <label class="text-sm text-gray-400" title="Enable Signal Filtering">Enable Filters</label>
-                                    <input type="checkbox" id="use-filter" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-blue-600">
-                                </div>
-                                <div>
-                                    <label class="block text-sm text-gray-400 mb-1">ADX Threshold</label>
-                                    <input type="number" id="adx-threshold" value="25" min="10" max="50" class="w-full bg-gray-700 rounded px-3 py-2 text-sm">
-                                </div>
-                                <div class="flex items-center justify-between">
-                                    <label class="text-sm text-gray-400" title="Avoid trading when BB Width is low">Avoid Squeeze</label>
-                                    <input type="checkbox" id="avoid-squeeze" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-blue-600">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Money Management -->
-                    <div class="bg-gray-800 p-4 md:p-6 rounded-lg shadow-lg">
-                        <h3 class="text-lg md:text-xl font-bold mb-4 text-yellow-400">Money Management</h3>
-                        <div class="space-y-4">
-                            <div class="flex items-center justify-between">
-                                <label class="text-sm text-gray-400">Use Martingale</label>
-                                <input type="checkbox" id="use-martingale" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-blue-600">
-                            </div>
-                            <div class="flex items-center justify-between">
-                                <label class="text-sm text-gray-400" title="Adjust stake based on volatility (ATR)">Smart Risk (ATR)</label>
-                                <input type="checkbox" id="smart-risk" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-blue-600">
-                            </div>
-                            <div>
-                                <label class="block text-sm text-gray-400 mb-1">Martingale Multiplier</label>
-                                <input type="number" id="martingale-multiplier" value="2.1" step="0.1" class="w-full bg-gray-700 rounded px-3 py-2">
-                            </div>
-                            <div class="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label class="block text-sm text-gray-400 mb-1">Target Profit ($)</label>
-                                    <input type="number" id="take-profit" value="0" placeholder="0 = Off" class="w-full bg-gray-700 rounded px-3 py-2">
-                                </div>
-                                <div>
-                                    <label class="block text-sm text-gray-400 mb-1">Stop Loss ($)</label>
-                                    <input type="number" id="stop-loss" value="0" placeholder="0 = Off" class="w-full bg-gray-700 rounded px-3 py-2">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Bot Control -->
-                    <div class="bg-gray-800 p-4 md:p-6 rounded-lg shadow-lg col-span-1 md:col-span-2">
-                        <h3 class="text-lg md:text-xl font-bold mb-4 text-purple-400">Bot Control</h3>
-
-                         <!-- Auto Select Asset -->
-                        <div class="flex items-center justify-between mb-4 p-3 bg-gray-700 rounded">
-                            <div>
-                                <span class="font-bold text-sm block text-purple-300">Auto Select Asset</span>
-                                <span class="text-xs text-gray-400">Automatically switch to the best trending asset</span>
-                            </div>
-                            <input type="checkbox" id="auto-select-asset" class="w-6 h-6 rounded bg-gray-900 border-gray-600 text-purple-600">
-                        </div>
-
-                        <!-- Manual Overrides -->
-                         <div class="flex items-center justify-between mb-4 p-3 bg-gray-800 border border-gray-700 rounded">
-                             <div class="flex flex-col">
-                                <span class="text-sm text-gray-400">Lock Params</span>
-                                <span class="text-[10px] text-gray-500">Prevent Auto-Changes</span>
-                             </div>
-                             <input type="checkbox" id="lock-params" class="w-5 h-5 rounded bg-gray-900 border-gray-600 text-red-600">
-                        </div>
-
-                        <div class="flex items-center justify-between mb-4">
-                            <span>Status:</span>
-                            <span id="bot-status" class="font-bold text-red-500">STOPPED</span>
-                        </div>
-
-                        <!-- Real-time Stats -->
-                        <div class="grid grid-cols-3 gap-2 mb-4">
-                            <div class="bg-gray-900 p-2 rounded border border-gray-700">
-                                <span class="block text-xs text-gray-400">Condition</span>
-                                <span id="market-condition" class="font-bold text-xs sm:text-sm text-yellow-400">...</span>
-                            </div>
-                            <div class="bg-gray-900 p-2 rounded border border-gray-700">
-                                <span class="block text-xs text-gray-400">Confidence</span>
-                                <span id="signal-confidence" class="font-bold text-xs sm:text-sm text-blue-400">0%</span>
-                            </div>
-                            <div class="bg-gray-900 p-2 rounded border border-gray-700">
-                                <span class="block text-xs text-gray-400">Entropy</span>
-                                <span id="market-entropy" class="font-bold text-xs sm:text-sm text-purple-400">0.0</span>
-                            </div>
-                            <div class="bg-gray-900 p-2 rounded border border-gray-700">
-                                <span class="block text-xs text-gray-400">Health</span>
-                                <span id="health-status" class="font-bold text-xs sm:text-sm text-green-400">100%</span>
-                            </div>
-                            <div class="bg-gray-900 p-2 rounded border border-gray-700">
-                                <span class="block text-xs text-gray-400">EQS</span>
-                                <span id="eqs-status" class="font-bold text-xs sm:text-sm text-blue-400">--</span>
-                            </div>
-                            <div class="bg-gray-900 p-2 rounded border border-gray-700 col-span-2">
-                                <span class="block text-xs text-gray-400">Watchdog</span>
-                                <span id="watchdog-status" class="font-bold text-xs text-gray-300">Idle</span>
-                            </div>
-                            <!-- Extended Stats -->
-                            <div class="bg-gray-900 p-2 rounded border border-gray-700 col-span-3 grid grid-cols-4 gap-1 text-center font-mono text-[10px]">
-                                <div>T: <span id="dash-score-trend" class="font-bold">-</span></div>
-                                <div>M: <span id="dash-score-mom" class="font-bold">-</span></div>
-                                <div>V: <span id="dash-score-vol" class="font-bold">-</span></div>
-                                <div>S: <span id="dash-score-ai" class="font-bold">-</span></div>
-                            </div>
-                            <!-- Hidden Fields for App compatibility -->
-                            <div class="hidden">
-                                <span id="dash-regime"></span>
-                                <span id="dash-confidence"></span>
-                                <span id="dash-ai-prob"></span>
-                                <span id="dash-signal"></span>
-                                <span id="grade-a"></span>
-                                <span id="grade-b"></span>
-                                <span id="grade-c"></span>
-                                <span id="grade-d"></span>
-                                <span id="grade-f"></span>
-                                <span id="recovery-badge"></span>
-                            </div>
-                        </div>
-
-                         <div class="flex items-center justify-between mb-4">
-                            <span>Session Profit:</span>
-                            <span id="bot-total-profit" class="font-bold text-gray-300">$0.00</span>
-                        </div>
-                        <div class="flex gap-2 mb-2">
-                             <button id="btn-start-bot" class="flex-1 bg-blue-600 hover:bg-blue-500 py-3 rounded font-bold shadow-lg">START</button>
-                             <button id="btn-stop-bot" class="flex-1 bg-red-600 hover:bg-red-500 py-3 rounded font-bold hidden shadow-lg">STOP</button>
-                             <button id="btn-pause-bot" class="w-1/3 bg-yellow-600 hover:bg-yellow-500 py-3 rounded font-bold hidden shadow-lg text-sm"><i class="fa-solid fa-pause"></i></button>
-                        </div>
-
-                        <div class="mt-4 p-4 bg-gray-900 rounded h-40 overflow-y-auto font-mono text-xs" id="bot-logs">
-                            <div class="text-gray-500">System ready...</div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Backtest Section -->
-            <section id="backtest" class="page-section hidden absolute inset-0 p-4 md:p-8 overflow-y-auto">
-                <h2 class="text-xl md:text-2xl font-bold mb-6 text-green-400">Strategy Backtester</h2>
-
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                    <div class="bg-gray-800 p-4 rounded-lg">
-                        <label class="block text-sm text-gray-400 mb-1">Asset</label>
-                        <select id="bt-asset" class="w-full bg-gray-700 rounded px-2 py-1">
+            <!-- Dashboard View -->
+            <div id="dashboard" class="page-section absolute inset-0 flex flex-col">
+                <!-- Top Toolbar -->
+                <div class="h-12 bg-gray-900/50 border-b border-gray-800 flex items-center px-4 justify-between shrink-0">
+                    <div class="flex items-center space-x-2">
+                        <select id="asset-selector" class="bg-gray-800 text-xs rounded px-2 py-1 border border-gray-700">
                             <option value="R_100">Volatility 100</option>
                             <option value="R_75">Volatility 75</option>
                         </select>
+                        <span id="market-status" class="text-[10px] uppercase tracking-wider text-gray-500 font-bold border border-gray-700 px-2 py-0.5 rounded">CLOSED</span>
                     </div>
-                     <div class="bg-gray-800 p-4 rounded-lg">
-                        <label class="block text-sm text-gray-400 mb-1">Candles to Test</label>
-                        <select id="bt-count" class="w-full bg-gray-700 rounded px-2 py-1">
-                            <option value="500">500 (Last ~8 hours)</option>
-                            <option value="1000">1000 (Last ~16 hours)</option>
-                            <option value="2500">2500 (Last ~40 hours)</option>
-                            <option value="5000">5000 (Last ~3 days)</option>
-                        </select>
-                    </div>
-                    <div class="bg-gray-800 p-4 rounded-lg">
-                        <label class="block text-sm text-gray-400 mb-1">Action</label>
-                        <button id="btn-run-backtest" class="w-full bg-green-600 hover:bg-green-500 py-1 rounded font-bold shadow">
-                            Run Simulation
-                        </button>
+                    <div class="flex items-center space-x-2">
+                        <button id="btn-start-bot" class="bg-green-600 hover:bg-green-500 text-white text-xs font-bold px-4 py-1.5 rounded shadow transition">START ENGINE</button>
+                        <button id="btn-stop-bot" class="bg-red-600 hover:bg-red-500 text-white text-xs font-bold px-4 py-1.5 rounded shadow transition hidden">STOP ENGINE</button>
                     </div>
                 </div>
 
-                <div id="bt-results" class="hidden">
-                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                        <div class="bg-gray-800 p-4 rounded text-center">
-                            <span class="block text-gray-400 text-xs">Total Trades</span>
-                            <span id="bt-total-trades" class="text-xl font-bold">0</span>
-                        </div>
-                        <div class="bg-gray-800 p-4 rounded text-center">
-                            <span class="block text-gray-400 text-xs">Win Rate</span>
-                            <span id="bt-win-rate" class="text-xl font-bold text-blue-400">0%</span>
-                        </div>
-                        <div class="bg-gray-800 p-4 rounded text-center">
-                            <span class="block text-gray-400 text-xs">Net Profit</span>
-                            <span id="bt-profit" class="text-xl font-bold text-green-400">$0.00</span>
-                        </div>
-                        <div class="bg-gray-800 p-4 rounded text-center">
-                            <span class="block text-gray-400 text-xs">Max Drawdown</span>
-                            <span id="bt-drawdown" class="text-xl font-bold text-red-400">0%</span>
+                <div class="flex-1 flex flex-col md:flex-row overflow-hidden">
+                    <!-- Chart Area -->
+                    <div class="flex-1 relative border-r border-gray-800 min-h-[300px]">
+                        <div id="chart-container" class="absolute inset-0"></div>
+                        <!-- Overlay Stats -->
+                        <div class="absolute top-4 left-4 bg-gray-900/80 backdrop-blur border border-gray-700 p-2 rounded text-xs font-mono z-10">
+                            <div class="flex justify-between w-40 mb-1"><span>REGIME</span> <span id="overlay-regime" class="text-blue-400 font-bold">NEUTRAL</span></div>
+                            <div class="flex justify-between w-40"><span>CONFIDENCE</span> <span id="overlay-confidence" class="text-yellow-400 font-bold">0%</span></div>
                         </div>
                     </div>
 
-                    <div class="bg-gray-800 p-4 rounded-lg h-64 w-full relative mb-6">
-                        <h3 class="text-sm font-bold absolute top-2 left-4 text-gray-500">Equity Curve</h3>
-                        <div id="bt-chart" class="w-full h-full"></div>
-                    </div>
-
-                    <div class="bg-gray-800 rounded-lg overflow-hidden h-64 overflow-y-auto">
-                        <table class="w-full text-left text-xs">
-                             <thead class="bg-gray-700 text-gray-200 sticky top-0">
-                                <tr>
-                                    <th class="px-4 py-2">Time</th>
-                                    <th class="px-4 py-2">Type</th>
-                                    <th class="px-4 py-2">Entry</th>
-                                    <th class="px-4 py-2">Exit</th>
-                                    <th class="px-4 py-2">Result</th>
-                                    <th class="px-4 py-2">Profit</th>
-                                </tr>
-                            </thead>
-                            <tbody id="bt-log-body" class="text-gray-400">
-                                <!-- Logs -->
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <div id="bt-loading" class="hidden flex flex-col items-center justify-center py-12">
-                     <div class="w-10 h-10 border-4 border-green-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-                     <p class="text-gray-400 animate-pulse">Running Simulation...</p>
-                     <p id="bt-status-text" class="text-xs text-gray-500 mt-2"></p>
-                </div>
-            </section>
-
-            <!-- Trade History Section -->
-            <section id="history" class="page-section hidden absolute inset-0 p-4 md:p-8 overflow-y-auto">
-                <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-xl md:text-2xl font-bold">Trade History</h2>
-                    <button id="btn-export-history" class="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded text-sm font-bold shadow-lg transition transform active:scale-95">
-                        <i class="fa-solid fa-download mr-2"></i>Export
-                    </button>
-                </div>
-                <div class="bg-gray-800 rounded-lg shadow-lg overflow-hidden pb-20 md:pb-0">
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-left text-sm text-gray-400">
-                            <thead class="bg-gray-700 text-gray-200 uppercase">
-                                <tr>
-                                    <th class="px-6 py-3 whitespace-nowrap">Time</th>
-                                    <th class="px-6 py-3 whitespace-nowrap">Symbol</th>
-                                    <th class="px-6 py-3 whitespace-nowrap">Type</th>
-                                    <th class="px-6 py-3 whitespace-nowrap">Stake</th>
-                                    <th class="px-6 py-3 whitespace-nowrap">Result</th>
-                                    <th class="px-6 py-3 whitespace-nowrap">Grade</th>
-                                    <th class="px-6 py-3 whitespace-nowrap">Reasoning</th>
-                                </tr>
-                            </thead>
-                            <tbody id="trade-history-body">
-                                <!-- Rows will be added here -->
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Profile Section -->
-            <section id="profile" class="page-section hidden absolute inset-0 p-8">
-                <h2 class="text-2xl font-bold mb-6">User Profile</h2>
-                <div class="bg-gray-800 p-6 rounded-lg max-w-md">
-                    <div class="flex items-center space-x-4 mb-6">
-                        <div class="w-16 h-16 bg-gray-600 rounded-full flex items-center justify-center text-2xl">
-                            <i class="fa-solid fa-user"></i>
+                    <!-- Live Debugger Panel -->
+                    <div class="w-full md:w-80 bg-gray-900 flex flex-col border-l border-gray-800 shrink-0">
+                        <div class="p-3 border-b border-gray-800 font-bold text-xs uppercase tracking-wider text-gray-500 flex justify-between">
+                            <span>Execution Debugger</span>
+                            <i class="fa-solid fa-microchip"></i>
                         </div>
-                        <div>
-                            <h3 class="font-bold text-lg">Trader</h3>
-                            <p class="text-gray-400 text-sm" id="profile-loginid">ID: Loading...</p>
+
+                        <div class="p-4 space-y-4 overflow-y-auto flex-1 font-mono text-[11px]">
+                            <!-- State -->
+                            <div class="bg-gray-950 p-3 rounded border border-gray-800">
+                                <div class="flex justify-between mb-1">
+                                    <span class="text-gray-500">STATE</span>
+                                    <span id="debug-state" class="text-white font-bold">IDLE</span>
+                                </div>
+                                <div class="flex justify-between mb-1">
+                                    <span class="text-gray-500">LOCK</span>
+                                    <span id="debug-lock" class="text-red-500">UNLOCKED</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-500">COOLDOWN</span>
+                                    <span id="debug-cooldown" class="text-blue-400">READY</span>
+                                </div>
+                            </div>
+
+                            <!-- Risk -->
+                            <div class="bg-gray-950 p-3 rounded border border-gray-800">
+                                <div class="text-gray-500 mb-2 border-b border-gray-800 pb-1">RISK MANAGER</div>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <span class="block text-gray-600">KELLY</span>
+                                        <span id="debug-kelly" class="text-green-400">0.00</span>
+                                    </div>
+                                    <div>
+                                        <span class="block text-gray-600">WIN RATE</span>
+                                        <span id="debug-winrate" class="text-blue-400">0%</span>
+                                    </div>
+                                    <div>
+                                        <span class="block text-gray-600">DRAWDOWN</span>
+                                        <span id="debug-dd" class="text-red-400">0.0%</span>
+                                    </div>
+                                    <div>
+                                        <span class="block text-gray-600">STAKE</span>
+                                        <span id="debug-stake" class="text-yellow-400">$0.00</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Last Trade -->
+                            <div class="bg-gray-950 p-3 rounded border border-gray-800">
+                                <div class="text-gray-500 mb-2 border-b border-gray-800 pb-1">LAST SETTLEMENT</div>
+                                <div class="flex items-center justify-between">
+                                    <span id="debug-last-result" class="font-bold text-gray-400">NONE</span>
+                                    <span id="debug-last-profit" class="font-bold text-gray-400">$0.00</span>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                    <div class="border-t border-gray-700 pt-4 space-y-2">
-                        <div class="flex justify-between">
-                            <span class="text-gray-400">Account Type</span>
-                            <span id="profile-type" class="font-bold">Demo</span>
-                        </div>
-                        <div class="flex justify-between">
-                            <span class="text-gray-400">Currency</span>
-                            <span id="profile-currency" class="font-bold">USD</span>
-                        </div>
-                        <div class="flex justify-between">
-                            <span class="text-gray-400">Balance</span>
-                            <span id="profile-balance" class="font-bold text-green-400">...</span>
+
+                        <!-- Mini Logs -->
+                        <div class="h-1/3 border-t border-gray-800 flex flex-col">
+                            <div class="p-2 bg-gray-800 text-[10px] font-bold text-gray-400">SYSTEM LOGS</div>
+                            <div id="bot-logs" class="flex-1 overflow-y-auto p-2 font-mono text-[10px] space-y-1 bg-black text-gray-400">
+                                <!-- Logs injected here -->
+                            </div>
                         </div>
                     </div>
                 </div>
-            </section>
+            </div>
 
-            <!-- Support Section -->
-            <section id="support" class="page-section hidden absolute inset-0 p-8">
-                <h2 class="text-2xl font-bold mb-6">Support</h2>
-                <div class="bg-gray-800 p-6 rounded-lg max-w-2xl">
-                    <p class="mb-4">Need help using the AI Robot?</p>
-                    <ul class="space-y-2 mb-6">
-                        <li class="flex items-center"><i class="fa-solid fa-envelope w-8 text-blue-400"></i> support@deriv-ai-bot.com</li>
-                        <li class="flex items-center"><i class="fa-solid fa-phone w-8 text-green-400"></i> +1 234 567 890</li>
-                        <li class="flex items-center"><i class="fa-brands fa-telegram w-8 text-blue-300"></i> @DerivAIBotSupport</li>
-                    </ul>
-                    <form class="space-y-4">
-                        <input type="text" placeholder="Subject" class="w-full bg-gray-700 rounded px-4 py-2 text-white">
-                        <textarea placeholder="Describe your issue..." class="w-full bg-gray-700 rounded px-4 py-2 text-white h-32"></textarea>
-                        <button type="button" id="btn-send-support" class="bg-blue-600 hover:bg-blue-500 px-6 py-2 rounded font-bold">Send Message</button>
-                    </form>
+            <!-- Settings View (Hidden) -->
+            <div id="settings" class="page-section hidden absolute inset-0 p-8 overflow-y-auto">
+                <h2 class="text-2xl font-bold mb-6">Configuration</h2>
+                <!-- Simplification for this view -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="bg-gray-900 p-6 rounded border border-gray-800">
+                        <h3 class="text-lg font-bold mb-4 text-blue-400">Strategy</h3>
+                        <!-- Inputs -->
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-xs text-gray-500 mb-1">STRATEGY</label>
+                                <select id="bot-strategy" class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-2 text-sm">
+                                    <option value="ultra_instinct">Ultra Instinct (Trend+Mom)</option>
+                                </select>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <label class="text-sm">Lock Parameters</label>
+                                <input type="checkbox" id="lock-params" class="w-4 h-4 bg-gray-800 border-gray-700">
+                            </div>
+                        </div>
+                    </div>
                 </div>
-            </section>
+            </div>
 
         </main>
     </div>
 
-    <!-- Trade Reasoning Modal -->
-    <div id="reasoning-modal" class="modal opacity-0 pointer-events-none fixed w-full h-full top-0 left-0 flex items-center justify-center z-50">
-        <div class="modal-overlay absolute w-full h-full bg-black opacity-75"></div>
-        <div class="modal-container bg-gray-800 w-11/12 md:max-w-md mx-auto rounded shadow-lg z-50 overflow-y-auto max-h-[90vh]">
-            <div class="modal-content py-4 text-left px-6">
-                <!-- Title -->
-                <div class="flex justify-between items-center pb-3 border-b border-gray-700">
-                    <p class="text-2xl font-bold">Trade Analysis</p>
-                    <div class="modal-close cursor-pointer z-50">
-                        <i class="fa-solid fa-xmark text-xl"></i>
-                    </div>
-                </div>
-
-                <!-- Body -->
-                <div id="modal-body" class="my-5 text-sm">
-                    <!-- Dynamic Content -->
-                </div>
-
-                <!-- Footer -->
-                <div class="flex justify-end pt-2">
-                    <button class="modal-close px-4 py-2 bg-blue-600 rounded-lg text-white hover:bg-blue-500">Close</button>
-                </div>
-            </div>
-        </div>
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="fixed inset-0 bg-black z-50 flex flex-col items-center justify-center transition-opacity duration-500">
+        <i class="fa-solid fa-circle-notch text-blue-600 text-4xl animate-spin mb-4"></i>
+        <h2 class="text-xl font-bold tracking-widest">INITIALIZING</h2>
+        <p class="text-gray-500 text-xs mt-2">Connecting to Institutional Gateway...</p>
     </div>
 
-    <!-- Toast Notification -->
-    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2"></div>
+    <!-- Notification Toast -->
+    <div id="toast-container" class="fixed bottom-6 right-6 z-50 flex flex-col gap-2"></div>
 
-    <!-- Optional Config -->
-    <script src="config.js" onerror="console.log('No config.js found - Manual token entry required.')"></script>
-
+    <!-- Logic -->
+    <script src="config.js" onerror="console.log('Config missing')"></script>
     <script src="deriv-api.js"></script>
     <script src="bot.js"></script>
-    <script src="backtest.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

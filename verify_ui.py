@@ -17,40 +17,44 @@ def run(playwright):
     # Wait for DOM
     page.wait_for_load_state("domcontentloaded")
 
-    # 1. Switch to "Auto" (AI Robot) tab
-    print("Navigating to Auto tab...", flush=True)
-    auto_nav = page.locator("button.nav-btn").filter(has_text="Auto")
-    expect(auto_nav).to_be_visible()
-    auto_nav.click()
+    # Wait for Loader to vanish
+    print("Waiting for loader...", flush=True)
+    page.wait_for_selector("#loading-overlay", state="hidden", timeout=10000)
 
-    # 2. Check for "One Click Setup" Heading and Presets
-    print("Checking One Click Setup...", flush=True)
-    expect(page.locator("h3", has_text="One Click Setup")).to_be_visible()
+    # 1. Check for "ELITE EXECUTION" Header
+    print("Checking Header...", flush=True)
+    expect(page.locator("h1", has_text="ELITE")).to_be_visible()
 
-    # 3. Check Token Input Visibility (Should be visible now that config has empty tokens)
-    print("Checking Token Input Visibility...", flush=True)
+    # 2. Check Sidebar Navigation (Dashboard)
+    print("Checking Dashboard Nav...", flush=True)
+    dash_nav = page.locator("button.nav-btn[data-target='dashboard']")
+    expect(dash_nav).to_be_visible()
+
+    # 3. Check for Chart Container
+    print("Checking Chart...", flush=True)
+    expect(page.locator("#chart-container")).to_be_visible()
+
+    # 4. Check Debugger Panel Presence
+    print("Checking Debugger Panel...", flush=True)
+    expect(page.locator("text=Execution Debugger")).to_be_visible()
+    expect(page.locator("#debug-state")).to_be_visible()
+
+    # 5. Check Token Input (Should be hidden if config loaded)
+    print("Checking Token Input...", flush=True)
     token_input = page.locator("#api-token-input")
-
-    # Wait for init
-    page.wait_for_timeout(1000)
-
-    # Check if config.js has valid tokens (inferred from previous steps)
-    # If so, token input should be HIDDEN.
-    # Adjust expectation based on current state (Tokens populated)
 
     if token_input.is_visible():
         print("Token input is visible.", flush=True)
     else:
         print("Token input is hidden (Config loaded).", flush=True)
-        # Verify hidden state if that's what we expect now
         expect(token_input).to_be_hidden()
 
-    # 4. Take screenshot
+    # 6. Take screenshot
     if not os.path.exists("verification"):
         os.makedirs("verification")
 
     print("Taking screenshot...", flush=True)
-    page.screenshot(path="verification/dashboard_secure.png")
+    page.screenshot(path="verification/dashboard_elite.png")
     print("Screenshot taken.", flush=True)
 
     browser.close()
