@@ -714,6 +714,101 @@ function aggregateTick(time, price) {
     }
 }
 
+// --- Event Listeners ---
+
+function setupEventListeners() {
+    setupNavigationListeners();
+    setupModalListeners();
+    setupBotControlListeners();
+    setupSettingsListeners();
+}
+
+function setupNavigationListeners() {
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const target = btn.dataset.target;
+            ui.pages.forEach(p => p.classList.add('hidden'));
+            document.getElementById(target).classList.remove('hidden');
+            ui.navBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        });
+    });
+}
+
+function setupModalListeners() {
+    ui.modal.closes.forEach(btn => btn.addEventListener('click', closeModal));
+
+    if (ui.modal.el) {
+        ui.modal.el.addEventListener('click', (e) => {
+            if (e.target === ui.modal.el || e.target.classList.contains('modal-overlay')) {
+                closeModal();
+            }
+        });
+    }
+}
+
+function setupBotControlListeners() {
+    if(ui.accountSelector) {
+        ui.accountSelector.addEventListener('change', () => {
+            const type = ui.accountSelector.value;
+            bot.setAccountType(type);
+            api.setAccountType(type);
+        });
+    }
+
+    if(ui.assetSelector) {
+        ui.assetSelector.addEventListener('change', () => {
+            bot.setSymbol(ui.assetSelector.value);
+            api.subscribeTicks(ui.assetSelector.value);
+        });
+    }
+
+    if(ui.btns.startBot) ui.btns.startBot.addEventListener('click', () => {
+        bot.start();
+        ui.btns.startBot.classList.add('hidden');
+        ui.btns.stopBot.classList.remove('hidden');
+        ui.btns.pauseBot.classList.remove('hidden');
+    });
+
+    if(ui.btns.stopBot) ui.btns.stopBot.addEventListener('click', () => {
+        bot.stop();
+        ui.btns.stopBot.classList.add('hidden');
+        ui.btns.pauseBot.classList.add('hidden');
+        ui.btns.startBot.classList.remove('hidden');
+    });
+
+    if(ui.btns.pauseBot) ui.btns.pauseBot.addEventListener('click', () => {
+        const isPaused = bot.togglePause();
+        ui.btns.pauseBot.innerHTML = isPaused ? '<i class="fa-solid fa-play"></i>' : '<i class="fa-solid fa-pause"></i>';
+        ui.btns.pauseBot.setAttribute('aria-label', isPaused ? 'Resume Bot' : 'Pause Bot');
+    });
+}
+
+function setupSettingsListeners() {
+    if(ui.botSettings.strategy) {
+        ui.botSettings.strategy.addEventListener('change', () => {
+            renderStrategyParams(ui.botSettings.strategy.value);
+            bot.updateConfig(ui.botSettings.strategy.value, ui.botSettings.risk.value);
+            saveSettings();
+        });
+    }
+
+    if(ui.backtest.runBtn) ui.backtest.runBtn.addEventListener('click', runBacktest);
+
+    document.querySelectorAll('.btn-preset').forEach(btn => {
+        btn.addEventListener('click', () => applyPreset(btn.dataset.preset));
+    });
+
+    if(ui.btns.loadChallenge) {
+        ui.btns.loadChallenge.addEventListener('click', () => {
+             bot.setSmallAccountMode(true);
+             showToast('Small Account Challenge Mode Activated!', 'success');
+        });
+    }
+
+    if(ui.btns.exportHistory) ui.btns.exportHistory.addEventListener('click', exportHistory);
+}
+
 // --- API Events ---
 
 function setupApiCallbacks() {
