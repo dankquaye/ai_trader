@@ -282,7 +282,6 @@ class QLAgent {
     constructor() {
         this.qTable = {}; // Key: "Regime-Conf", Value: [Q_Action0, Q_Action1, Q_Action2]
         this.alpha = 0.1; // Learning Rate
-        this.gamma = 0.9; // Discount Factor
         this.epsilon = 0.1; // Exploration Rate
         this.actions = [0, 1, 2]; // Tighten, Neutral, Loosen
     }
