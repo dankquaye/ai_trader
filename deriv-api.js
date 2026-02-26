@@ -1,44 +1,70 @@
-// deriv-api.js - Deriv WebSocket API Wrapper
+// deriv-api.js - Robust WebSocket API Wrapper
+// Implements: Auto-Reconnect (Exponential Backoff), State Restoration, Subscription Management
 
-/**
- * DerivAPI - Manages WebSocket connection and messaging
- */
 class DerivAPI {
     constructor() {
         this.ws = null;
         this.token = null;
         this.appId = null;
+        this.accountType = 'demo';
         this.isConnected = false;
         this.msgHandlers = {};
-        this.activeSymbol = 'R_100';
-        this.streamIds = [];
-        this.pendingRequests = {}; // Request matching
 
-        // Auto-Recovery & Latency
-        this.shouldReconnect = true;
-        this.reconnectInterval = 2000;
-        this.pingInterval = null;
-        this.latency = 0;
+        // Subscription Management
         this.activeSubscriptions = {
             ticks: null,
             candles: null
         };
+        this.pendingRequests = {};
+
+        // Reconnection Logic
+        this.shouldReconnect = true;
+        this.reconnectAttempts = 0;
+        this.maxReconnectAttempts = 10;
+        this.baseReconnectDelay = 1000;
+        this.pingInterval = null;
+        this.latency = 0;
+
+        this.debug = false;
 
         // Credentials
-        // NOTE: Tokens should be provided by the user via UI or Environment Variables.
-        // Hardcoded tokens removed for security.
         this.credentials = {
-            demo: {
-                appId: 71238,
-                token: '' // User must provide
-            },
-            live: {
-                appId: 71236,
-                token: '' // User must provide
-            }
+            demo: { appId: 71238, token: '' },
+            live: { appId: 71236, token: '' }
         };
 
-        this.accountType = 'demo';
+        // Load Config
+        if (typeof window.DerivConfig !== 'undefined') {
+            if (window.DerivConfig.demo) {
+                this.credentials.demo.appId = window.DerivConfig.demo.appId || 71238;
+                this.credentials.demo.token = window.DerivConfig.demo.token;
+            }
+            if (window.DerivConfig.live) {
+                this.credentials.live.appId = window.DerivConfig.live.appId || 71236;
+                this.credentials.live.token = window.DerivConfig.live.token;
+            }
+        }
+    }
+
+    // --- Configuration ---
+
+    setAccountType(type) {
+        if (type !== 'demo' && type !== 'live') return;
+        if (this.accountType === type && this.isConnected) return;
+
+        this.accountType = type;
+        this.disconnect();
+
+        // Reset state for clean switch
+        this.reconnectAttempts = 0;
+
+        // Connect if credentials exist
+        const creds = this.credentials[this.accountType];
+        if (creds && creds.token) {
+            this.connect();
+        } else {
+            console.warn(`[DerivAPI] No token for ${type}. Waiting for user input.`);
+        }
     }
 
     setToken(token) {
@@ -47,15 +73,7 @@ class DerivAPI {
         }
     }
 
-    setAccountType(type) {
-        if (type !== 'demo' && type !== 'live') return;
-        this.accountType = type;
-        this.disconnect();
-        // Do not auto-connect if token is missing
-        if (this.credentials[this.accountType].token) {
-            this.connect();
-        }
-    }
+    // --- Connection Lifecycle ---
 
     connect() {
         this.shouldReconnect = true;
@@ -64,73 +82,137 @@ class DerivAPI {
         this.token = creds.token;
 
         if (!this.token) {
-            console.warn('Cannot connect: Missing API Token');
+            console.warn('[DerivAPI] Cannot connect: Missing Token');
             return;
         }
 
         const url = `wss://ws.binaryws.com/websockets/v3?app_id=${this.appId}`;
-        console.log(`Connecting to ${this.accountType} account via ${url}...`);
+        if(this.debug) console.log(`[DerivAPI] Connecting to ${this.accountType}...`);
 
-        this.ws = new WebSocket(url);
-
-        this.ws.onopen = () => {
-            console.log('WebSocket Connected');
-            this.isConnected = true;
-            this.authorize();
-        };
-
-        this.ws.onmessage = (msg) => {
-            try {
-                const data = JSON.parse(msg.data);
-                this.handleMessage(data);
-            } catch (e) {
-                console.error('WebSocket Message Error:', e);
-            }
-        };
-
-        this.ws.onclose = () => {
-            console.log('WebSocket Disconnected');
-            this.isConnected = false;
-            this.streamIds = [];
-            this.stopPing();
-
-            if (this.shouldReconnect) {
-                console.log(`Reconnecting in ${this.reconnectInterval}ms...`);
-                setTimeout(() => this.connect(), this.reconnectInterval);
-            }
-        };
-
-        this.ws.onerror = (err) => {
-            console.error('WebSocket Error', err);
-        };
+        try {
+            this.ws = new WebSocket(url);
+            this.ws.onopen = () => this._onOpen();
+            this.ws.onmessage = (msg) => this._onMessage(msg);
+            this.ws.onclose = () => this._onClose();
+            this.ws.onerror = (err) => this._onError(err);
+        } catch (e) {
+            console.error('[DerivAPI] Socket Init Error:', e);
+            this._scheduleReconnect();
+        }
     }
 
     disconnect() {
         this.shouldReconnect = false;
-        this.stopPing();
+        this._stopPing();
         if (this.ws) {
             this.ws.close();
+            this.ws = null;
+        }
+        this.isConnected = false;
+    }
+
+    _onOpen() {
+        if(this.debug) console.log('[DerivAPI] Connected');
+        this.isConnected = true;
+        this.reconnectAttempts = 0;
+
+        // 1. Authorize
+        this.authorize();
+    }
+
+    _onClose() {
+        if(this.debug) console.log('[DerivAPI] Disconnected');
+        this.isConnected = false;
+        this._stopPing();
+        if (this.shouldReconnect) {
+            this._scheduleReconnect();
         }
     }
+
+    _onError(err) {
+        console.error('[DerivAPI] Error:', err);
+    }
+
+    _scheduleReconnect() {
+        if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+            console.error('[DerivAPI] Max reconnect attempts reached. Giving up.');
+            return;
+        }
+
+        const delay = this.baseReconnectDelay * Math.pow(2, this.reconnectAttempts);
+        if(this.debug) console.log(`[DerivAPI] Reconnecting in ${delay}ms (Attempt ${this.reconnectAttempts + 1}/${this.maxReconnectAttempts})...`);
+
+        this.reconnectAttempts++;
+        setTimeout(() => this.connect(), delay);
+    }
+
+    // --- Messaging ---
 
     send(data) {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             this.ws.send(JSON.stringify(data));
         } else {
-            console.warn('WebSocket not ready. Cannot send:', data);
+            // console.warn('[DerivAPI] Socket not ready, dropping:', data);
         }
     }
 
-    /**
-     * Send a request and wait for the response
-     * @param {Object} data - Request payload
-     * @param {boolean} suppressGlobal - If true, do not emit global events for this response
-     * @returns {Promise<Object>}
-     */
+    _onMessage(msg) {
+        try {
+            const data = JSON.parse(msg.data);
+
+            // Request Matching
+            if (data.req_id || (data.echo_req && data.echo_req.req_id)) {
+                const reqId = data.req_id || data.echo_req.req_id;
+                if (this.pendingRequests[reqId]) {
+                    const req = this.pendingRequests[reqId];
+                    clearTimeout(req.timeoutId);
+                    if (data.error) req.reject(new Error(data.error.message));
+                    else req.resolve(data);
+                    delete this.pendingRequests[reqId];
+                    if (req.suppressGlobal) return;
+                }
+            }
+
+            // Global Handlers
+            if (data.error) {
+                console.error('[DerivAPI] API Error:', data.error.message);
+                if (this.msgHandlers['error']) this.msgHandlers['error'](data.error);
+                return;
+            }
+
+            const type = data.msg_type;
+
+            // Internal Handling
+            if (type === 'authorize') {
+                if(this.debug) console.log(`[DerivAPI] Authorized: ${data.authorize.email}`);
+                this._restoreSubscriptions(); // Restore state after auth
+                this._startPing();
+            }
+
+            // Dispatch
+            if (this.msgHandlers[type]) {
+                this.msgHandlers[type](type === 'tick' ? data.tick : (type === 'history' ? data.history : (type === 'candles' ? data.candles : data[type])));
+            }
+
+            // Special handling for contracts
+            if (type === 'proposal_open_contract') {
+                const contract = data.proposal_open_contract;
+                if (contract.is_sold && this.msgHandlers['contract_finish']) {
+                    this.msgHandlers['contract_finish'](contract);
+                } else if (!contract.is_sold && this.msgHandlers['contract_update']) {
+                    this.msgHandlers['contract_update'](contract);
+                }
+            }
+
+        } catch (e) {
+            console.error('[DerivAPI] Message Parse Error:', e);
+        }
+    }
+
     sendRequest(data, suppressGlobal = false) {
         return new Promise((resolve, reject) => {
             if (!this.isConnected) return reject(new Error('Not connected'));
-            const reqId = Date.now() + Math.floor(Math.random() * 1000);
+            const reqId = Date.now() + Math.floor(Math.random() * 100000);
             data.req_id = reqId;
 
             const timeoutId = setTimeout(() => {
@@ -145,55 +227,68 @@ class DerivAPI {
         });
     }
 
-    authorize() {
-        this.send({ authorize: this.token });
-    }
+    // --- Actions ---
 
-    startPing() {
-        if (this.pingInterval) clearInterval(this.pingInterval);
-        this.pingInterval = setInterval(() => {
-            const start = Date.now();
-            this.sendRequest({ ping: 1 }, true)
-                .then(() => {
-                    this.latency = Date.now() - start;
-                    if (this.latency > 1000) {
-                        console.warn(`High Latency: ${this.latency}ms`);
-                        if(this.msgHandlers['latency_warning']) this.msgHandlers['latency_warning'](this.latency);
-                    }
-                })
-                .catch(() => {});
-        }, 15000); // Check every 15s
-    }
-
-    stopPing() {
-        if (this.pingInterval) clearInterval(this.pingInterval);
+    authorize(token) {
+        const t = token || this.token;
+        if (!t) return;
+        this.send({ authorize: t });
     }
 
     subscribeTicks(symbol) {
+        if(this.activeSubscriptions.ticks === symbol) return; // Prevent duplicate
+
+        // Forget previous if exists? Ideally yes, but simplified here.
+        // We will just subscribe new.
         this.send({ ticks: symbol, subscribe: 1 });
-        this.activeSymbol = symbol;
         this.activeSubscriptions.ticks = symbol;
     }
 
     subscribeCandles(symbol, granularity) {
+        // If same subscription exists, skip
+        if(this.activeSubscriptions.candles &&
+           this.activeSubscriptions.candles.symbol === symbol &&
+           this.activeSubscriptions.candles.granularity === granularity) return;
+
         this.send({ ticks_history: symbol, end: 'latest', count: 100, style: 'candles', granularity: granularity, subscribe: 1 });
         this.activeSubscriptions.candles = { symbol, granularity };
     }
 
-    unsubscribeAll() {
-        this.send({ forget_all: ['ticks', 'candles'] });
-        this.streamIds = [];
-        this.activeSubscriptions = { ticks: null, candles: null };
+    _restoreSubscriptions() {
+        this.send({ balance: 1, subscribe: 1 });
+        if (this.activeSubscriptions.ticks) {
+            this.send({ ticks: this.activeSubscriptions.ticks, subscribe: 1 });
+        }
+        if (this.activeSubscriptions.candles) {
+            const c = this.activeSubscriptions.candles;
+            this.send({ ticks_history: c.symbol, end: 'latest', count: 100, style: 'candles', granularity: c.granularity, subscribe: 1 });
+        }
+    }
+
+    placeTrade(direction, amount, duration, symbol) {
+        const req = {
+            proposal: 1,
+            amount: amount,
+            basis: 'stake',
+            contract_type: direction === 'rise' ? 'CALL' : 'PUT',
+            currency: 'USD',
+            duration: duration,
+            duration_unit: 't',
+            symbol: symbol
+        };
+        this.send(req);
+    }
+
+    buyContract(id, price) {
+        this.send({ buy: id, price: price });
+    }
+
+    subscribeContract(contractId) {
+        this.send({ proposal_open_contract: 1, contract_id: contractId, subscribe: 1 });
     }
 
     getHistory(symbol, count = 100) {
-        this.send({
-            ticks_history: symbol,
-            adjust_start_time: 1,
-            count: count,
-            end: 'latest',
-            style: 'ticks'
-        });
+        this.send({ ticks_history: symbol, adjust_start_time: 1, count: count, end: 'latest', style: 'ticks' });
     }
 
     fetchCandles(symbol, granularity) {
@@ -207,122 +302,28 @@ class DerivAPI {
         }, true).then(resp => resp.candles || []);
     }
 
-    placeTrade(direction, amount, duration, symbol) {
-        const contractType = direction === 'rise' ? 'CALL' : 'PUT';
+    // --- Ping/Pong ---
 
-        const proposalReq = {
-            proposal: 1,
-            amount: amount,
-            basis: 'stake',
-            contract_type: contractType,
-            currency: 'USD',
-            duration: duration,
-            duration_unit: 't',
-            symbol: symbol
-        };
-
-        this.pendingTrade = true;
-        this.send(proposalReq);
+    _startPing() {
+        if (this.pingInterval) clearInterval(this.pingInterval);
+        this.pingInterval = setInterval(() => {
+            const start = Date.now();
+            this.sendRequest({ ping: 1 }, true)
+                .then(() => {
+                    this.latency = Date.now() - start;
+                    if(this.latency > 1000) console.warn(`[DerivAPI] High Latency: ${this.latency}ms`);
+                })
+                .catch(() => {});
+        }, 15000);
     }
 
-    handleMessage(data) {
-        let suppressed = false;
-
-        // Request Matching
-        if (data.req_id && this.pendingRequests[data.req_id]) {
-            const req = this.pendingRequests[data.req_id];
-            clearTimeout(req.timeoutId);
-            req.resolve(data);
-            if (req.suppressGlobal) suppressed = true;
-            delete this.pendingRequests[data.req_id];
-        } else if (data.echo_req && data.echo_req.req_id && this.pendingRequests[data.echo_req.req_id]) {
-            const req = this.pendingRequests[data.echo_req.req_id];
-            clearTimeout(req.timeoutId);
-            req.resolve(data);
-            if (req.suppressGlobal) suppressed = true;
-            delete this.pendingRequests[data.echo_req.req_id];
-        }
-
-        const msgType = data.msg_type;
-
-        if (data.error) {
-            console.error('API Error:', data.error.message);
-             if (data.echo_req && data.echo_req.req_id && this.pendingRequests[data.echo_req.req_id]) {
-                const req = this.pendingRequests[data.echo_req.req_id];
-                clearTimeout(req.timeoutId);
-                req.reject(new Error(data.error.message));
-                delete this.pendingRequests[data.echo_req.req_id];
-             }
-            if (this.msgHandlers['error']) this.msgHandlers['error'](data.error);
-            return;
-        }
-
-        if (suppressed) return;
-
-        switch (msgType) {
-            case 'authorize':
-                console.log('Authorized:', data.authorize.email);
-                if (this.msgHandlers['authorize']) this.msgHandlers['authorize'](data.authorize);
-                this.send({ balance: 1, subscribe: 1 });
-                this.startPing();
-                break;
-
-            case 'balance':
-                if (this.msgHandlers['balance']) this.msgHandlers['balance'](data.balance);
-                break;
-
-            case 'tick':
-                if (this.msgHandlers['tick']) this.msgHandlers['tick'](data.tick);
-                break;
-
-            case 'history':
-                if (this.msgHandlers['history']) this.msgHandlers['history'](data.history);
-                break;
-
-            case 'ohlc':
-                if (this.msgHandlers['ohlc']) this.msgHandlers['ohlc'](data.ohlc);
-                break;
-
-            case 'candles':
-                if (this.msgHandlers['candles']) this.msgHandlers['candles'](data.candles);
-                break;
-
-            case 'proposal':
-                if (this.pendingTrade) {
-                    this.pendingTrade = false;
-                    const id = data.proposal.id;
-                    this.send({ buy: id, price: data.proposal.ask_price });
-                }
-                break;
-
-            case 'buy':
-                console.log('Trade placed:', data.buy);
-                if (this.msgHandlers['buy']) this.msgHandlers['buy'](data.buy);
-
-                const contractId = data.buy.contract_id;
-                if(window.bot && window.bot.onTradePlaced) window.bot.onTradePlaced(contractId);
-
-                this.send({ proposal_open_contract: 1, contract_id: contractId, subscribe: 1 });
-                break;
-
-            case 'proposal_open_contract':
-                const contract = data.proposal_open_contract;
-                const isSold = contract.is_sold;
-
-                if (isSold) {
-                    if (this.msgHandlers['contract_finish']) {
-                        this.msgHandlers['contract_finish'](contract);
-                    }
-                } else {
-                     if (this.msgHandlers['contract_update']) {
-                         this.msgHandlers['contract_update'](contract);
-                     }
-                }
-                break;
-        }
+    _stopPing() {
+        if (this.pingInterval) clearInterval(this.pingInterval);
     }
 
     on(type, callback) {
         this.msgHandlers[type] = callback;
     }
 }
+
+window.DerivAPI = DerivAPI;
