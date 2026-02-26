@@ -7,10 +7,10 @@ class RiskManager {
         // Limits
         this.maxDailyLoss = 0.10; // 10%
         this.maxDailyProfit = 0.20; // 20%
-        this.maxDrawdown = 0.10; // Hard stop
+        this.maxDrawdown = 0.15; // Increased to 15% as per request
 
         // Sizing
-        this.baseKelly = 0.1; // Fraction of Kelly to use (0.1 = 10% of Edge)
+        this.baseKelly = 0.1;
         this.maxStake = 50;
 
         this.stopReason = null;
@@ -19,32 +19,29 @@ class RiskManager {
     canTrade() {
         if (!this.state) return false;
         const start = this.state.startBalance || this.state.balance;
-        if (start === 0) return true; // Init
+        if (start === 0) return true;
 
         const pnl = (this.state.balance - start) / start;
 
-        // Daily Limits
+        // 1. Daily Limits
         if (pnl <= -this.maxDailyLoss) { this.stopReason = 'Max Daily Loss'; return false; }
         if (pnl >= this.maxDailyProfit) { this.stopReason = 'Target Hit'; return false; }
 
-        // Drawdown
+        // 2. Drawdown Guard (15%)
         const dd = (this.state.equityHigh - this.state.balance) / this.state.equityHigh;
-        if (dd >= this.maxDrawdown) { this.stopReason = 'Max Drawdown'; return false; }
+        if (dd >= this.maxDrawdown) { this.stopReason = 'Max Equity Drawdown'; return false; }
 
-        // Consecutive Losses
-        if (this.state.consecutiveLosses >= 3) { this.stopReason = 'Consecutive Losses (Cooldown)'; return false; }
+        // 3. Loss Cluster Detection
+        if (this.state.consecutiveLosses >= 3) { this.stopReason = 'Loss Cluster (Cooldown)'; return false; }
 
         return true;
     }
 
     calculateStake(confidence) {
-        // Kelly: f = (bp - q) / b
-        // b = 0.95 (approx payout)
-        // p = Win Rate (Last 20)
-
+        // Capped Dynamic Scaling (Kelly-based)
         const history = this.state.recentTrades || [];
         const total = history.length;
-        if (total < 10) return Math.max(0.35, this.state.balance * 0.005); // Warmup: 0.5% risk
+        if (total < 10) return Math.max(0.35, this.state.balance * 0.005);
 
         const wins = history.filter(x => x === 1).length;
         const p = wins / total;
@@ -53,14 +50,18 @@ class RiskManager {
 
         let kelly = (b * p - q) / b;
 
-        // Caps
-        kelly = Math.max(0, Math.min(kelly, 0.25)); // Cap at 25% Kelly
+        // Strict Caps
+        kelly = Math.max(0, Math.min(kelly, 0.25));
 
         // Adjust
         let stake = this.state.balance * kelly * this.baseKelly;
 
         // Confidence Scaling
         stake = stake * (confidence / 100);
+
+        // Drawdown Damping: Reduce stake if in drawdown
+        const dd = (this.state.equityHigh - this.state.balance) / this.state.equityHigh;
+        if (dd > 0.05) stake *= 0.5; // Half size if >5% DD
 
         // Bounds
         stake = Math.max(0.35, Math.min(stake, this.maxStake));

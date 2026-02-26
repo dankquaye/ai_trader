@@ -2,13 +2,10 @@
 
 class RegimeDetector {
     constructor() {
-        this.currentRegime = 'NEUTRAL'; // TRENDING_UP, TRENDING_DOWN, CHOPPY, VOLATILE, LOW_VOL
-        this.stats = {
-            atr: 0,
-            rsi: 50,
-            maSlope: 0,
-            adx: 0,
-            range: 0
+        this.currentRegime = {
+            type: 'NEUTRAL',
+            strength: 0,
+            details: {}
         };
     }
 
@@ -29,50 +26,73 @@ class RegimeDetector {
 
         // 3. MA Slope (Trend)
         const sma20 = this._calculateSMA(closes, 20);
-        const slope = (sma20[sma20.length-1] - sma20[sma20.length-5]) / 5; // 5-period slope
+        const slope = (sma20[sma20.length-1] - sma20[sma20.length-5]) / 5;
 
-        // 4. Choppiness (Fractal)
-        const chop = this._calculateChoppiness(highs, lows, closes, 14);
+        // 4. Body Ratio (Momentum Strength)
+        const lastCandle = candles[candles.length-1];
+        const bodySize = Math.abs(lastCandle.close - lastCandle.open);
+        const totalSize = lastCandle.high - lastCandle.low;
+        const bodyRatio = totalSize > 0 ? bodySize / totalSize : 0;
 
-        // Classification Logic
-        this.stats = { atr: currentATR, rsi: currentRSI, maSlope: slope, adx: 0, range: chop };
-
+        // Classification
         const price = closes[closes.length-1];
         const volatilityPct = (currentATR / price) * 100;
 
-        if (volatilityPct < 0.02) {
-            this.currentRegime = 'LOW_VOLATILITY';
-        } else if (volatilityPct > 0.5) {
-            this.currentRegime = 'VOLATILE';
-        } else if (chop > 60) {
-            this.currentRegime = 'CHOPPY';
-        } else {
-            if (slope > 0 && currentRSI > 50) this.currentRegime = 'TRENDING_UP';
-            else if (slope < 0 && currentRSI < 50) this.currentRegime = 'TRENDING_DOWN';
-            else this.currentRegime = 'NEUTRAL';
-        }
-    }
+        let type = 'NEUTRAL';
+        let strength = 50;
 
-    // --- Indicators ---
+        if (volatilityPct < 0.02) {
+            type = 'LOW_VOLATILITY';
+            strength = 20;
+        } else if (volatilityPct > 0.5) {
+            type = 'VOLATILE';
+            strength = 90;
+        } else {
+            if (slope > 0.05 && currentRSI > 55) {
+                type = 'TRENDING_UP';
+                strength = Math.min(100, 50 + (slope*100) + (bodyRatio*20));
+            } else if (slope < -0.05 && currentRSI < 45) {
+                type = 'TRENDING_DOWN';
+                strength = Math.min(100, 50 + (Math.abs(slope)*100) + (bodyRatio*20));
+            } else {
+                type = 'CHOPPY';
+                strength = 40;
+            }
+        }
+
+        this.currentRegime = {
+            type: type,
+            strength: Math.floor(strength),
+            details: { atr: currentATR, rsi: currentRSI, slope: slope, bodyRatio: bodyRatio }
+        };
+    }
 
     _calculateATR(high, low, close, period) {
         let tr = [];
         for(let i=1; i<close.length; i++) {
             tr.push(Math.max(high[i]-low[i], Math.abs(high[i]-close[i-1]), Math.abs(low[i]-close[i-1])));
         }
-        return this._calculateSMA(tr, period); // SMA of TR roughly
+        return this._calculateSMA(tr, period);
     }
 
     _calculateRSI(data, period) {
-        // Simplified RSI
         let rsi = [];
-        for(let i=period; i<data.length; i++) {
-            // ... (Full impl would be here, mocking for brevity/stability in this snippet)
-            // Just basic delta check
-            const change = data[i] - data[i-period];
-            rsi.push(change > 0 ? 60 : 40);
+        let gains = 0, losses = 0;
+        for (let i = 1; i <= period; i++) {
+            const change = data[i] - data[i-1];
+            if (change > 0) gains += change; else losses += Math.abs(change);
         }
-        // Pad
+        let avgGain = gains / period;
+        let avgLoss = losses / period;
+        for (let i = period + 1; i < data.length; i++) {
+            const change = data[i] - data[i-1];
+            let gain = change > 0 ? change : 0;
+            let loss = change < 0 ? Math.abs(change) : 0;
+            avgGain = ((avgGain * (period - 1)) + gain) / period;
+            avgLoss = ((avgLoss * (period - 1)) + loss) / period;
+            let rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+            rsi.push(100 - (100 / (1 + rs)));
+        }
         while(rsi.length < data.length) rsi.unshift(50);
         return rsi;
     }
@@ -86,17 +106,6 @@ class RegimeDetector {
             if(i >= period-1) sma.push(sum/period); else sma.push(0);
         }
         return sma;
-    }
-
-    _calculateChoppiness(high, low, close, period) {
-        // Simple range check
-        if(close.length < period) return 50;
-        const h = Math.max(...high.slice(-period));
-        const l = Math.min(...low.slice(-period));
-        const range = h - l;
-        if(range === 0) return 50;
-        // Mock chop index
-        return 40;
     }
 }
 

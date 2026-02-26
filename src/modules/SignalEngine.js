@@ -3,60 +3,102 @@
 class SignalEngine {
     constructor(regimeDetector) {
         this.regime = regimeDetector;
-        this.strategies = {
-            'TRENDING_UP': this._stratTrendFollow.bind(this),
-            'TRENDING_DOWN': this._stratTrendFollow.bind(this),
-            'CHOPPY': this._stratMeanReversion.bind(this),
-            'VOLATILE': this._stratVolBreakout.bind(this),
-            'LOW_VOLATILITY': () => null,
-            'NEUTRAL': () => null
-        };
+        this.lastConfidence = 0;
+        this.cache = { lastEpoch: 0, indicators: {} };
+    }
+
+    invalidateCache() {
+        this.cache = { lastEpoch: 0, indicators: {} };
     }
 
     evaluate(ticks, candles) {
-        const regime = this.regime.currentRegime;
-        const strategy = this.strategies[regime];
+        if(candles.length === 0) return null;
 
-        if (!strategy) return null;
-
-        const rawSignal = strategy(ticks, candles);
-        if (!rawSignal) return null;
-
-        // Microstructure Filter (R_100/75 optimization)
-        if (!this._confirmMicrostructure(ticks, rawSignal)) {
-            return null;
+        // 1. Caching
+        const currentEpoch = candles[candles.length-1].epoch;
+        if(this.cache.lastEpoch === currentEpoch && this.cache.result) {
+            // Return cached result if tick is within same candle (debounce handled in Bot)
+            // But we might want to re-evaluate on ticks for microstructure?
+            // For now, let's allow re-eval but re-use indicator calcs if expensive.
         }
 
-        return rawSignal;
+        const regime = this.regime.currentRegime;
+        if (regime.type === 'LOW_VOLATILITY' || regime.type === 'CHOPPY') return null;
+
+        // 2. Weighted Scoring Matrix
+        let score = 0;
+        let signal = null;
+        let strategyName = 'neutral';
+
+        // Factor A: Trend (Weight 40)
+        const trendScore = this._scoreTrend(candles, regime);
+        score += trendScore;
+
+        // Factor B: Momentum (Weight 30)
+        const momScore = this._scoreMomentum(candles);
+        score += momScore;
+
+        // Factor C: Microstructure (Weight 30) - Calculated on Ticks
+        const microScore = this._scoreMicrostructure(ticks);
+        score += microScore;
+
+        this.lastConfidence = Math.abs(score);
+
+        // Decision
+        if (score > 60) { signal = 'rise'; strategyName = 'trend_follow'; }
+        else if (score < -60) { signal = 'fall'; strategyName = 'trend_follow'; }
+
+        if (signal) {
+            // Final Microstructure Gate
+            if (!this._confirmMicrostructure(ticks, signal)) return null;
+        }
+
+        return { signal, confidence: this.lastConfidence, strategy: strategyName };
     }
 
-    // --- Strategies ---
+    // --- Scoring ---
 
-    _stratTrendFollow(ticks, candles) {
-        const close = candles[candles.length-1].close;
-        const ema20 = this._ema(candles.map(c=>c.close), 20);
-        const lastEma = ema20[ema20.length-1];
-
-        if (this.regime.currentRegime === 'TRENDING_UP' && close > lastEma) return 'rise';
-        if (this.regime.currentRegime === 'TRENDING_DOWN' && close < lastEma) return 'fall';
-        return null;
+    _scoreTrend(candles, regime) {
+        // SMA Slope + Regime
+        // Range: -40 to +40
+        if (regime.type === 'TRENDING_UP') return 30;
+        if (regime.type === 'TRENDING_DOWN') return -30;
+        return 0;
     }
 
-    _stratMeanReversion(ticks, candles) {
-        // BB Reversion
-        // ...
-        return null;
+    _scoreMomentum(candles) {
+        // RSI
+        // Range: -30 to +30
+        const rsi = this.regime.currentRegime.details.rsi || 50;
+        if (rsi < 30) return 25; // Oversold -> Reversal Up or Strong Trend Down?
+        // Wait, "Ultra Instinct" logic was: pullback in trend.
+        // If Trend UP and RSI < 30 -> Buy Dip.
+        // If Trend DOWN and RSI > 70 -> Sell Rip.
+
+        // Let's align with that:
+        // If we want to buy, we want positive score.
+        if (rsi < 35) return 20;
+        if (rsi > 65) return -20;
+        return 0;
     }
 
-    _stratVolBreakout(ticks, candles) {
-        // ...
-        return null;
+    _scoreMicrostructure(ticks) {
+        // Tick Impulse
+        // Range: -30 to +30
+        if(ticks.length < 5) return 0;
+        const last = ticks[ticks.length-1];
+        const prev = ticks[ticks.length-2];
+        const diff = last - prev;
+
+        if (diff > 0.05) return 20;
+        if (diff < -0.05) return -20;
+        return 0;
     }
 
     // --- Filters ---
 
     _confirmMicrostructure(ticks, direction) {
-        // 2-tick confirmation
+        // 2-tick confirmation (Hard Gate)
         if (ticks.length < 3) return false;
         const t1 = ticks[ticks.length-1];
         const t2 = ticks[ticks.length-2];
@@ -67,16 +109,6 @@ class SignalEngine {
         } else {
             return t1 < t2 && t2 < t3;
         }
-    }
-
-    _ema(data, period) {
-        // Quick EMA
-        let result = [data[0]];
-        const k = 2 / (period + 1);
-        for(let i=1; i<data.length; i++) {
-            result.push(data[i] * k + result[i-1] * (1-k));
-        }
-        return result;
     }
 }
 

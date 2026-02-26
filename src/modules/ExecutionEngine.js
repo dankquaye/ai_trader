@@ -6,16 +6,29 @@ class ExecutionEngine {
         this.state = state;
         this.logger = logger;
         this.watchdogTimer = null;
+        this.lastTradeCandleTime = 0;
     }
 
-    execute(direction, stake, duration) {
-        if (this.state.executionLock) {
-            this.logger.warn('Execution Blocked: Lock Active');
+    attemptExecution(direction, stake, duration, candleTime) {
+        // 1. One Trade Per Candle Hard Lock
+        if (candleTime <= this.lastTradeCandleTime) {
             return;
         }
 
+        // 2. Micro-Tick Confirmation (Wait for 2 ticks in direction)
+        // Note: This logic effectively happens in SignalEngine now, but we can double check here
+        // or assume SignalEngine handled it. For clean execution, we proceed.
+
+        // 3. Volatility/Slippage Protection
+        if (this._detectVolatilitySpike()) {
+            this.logger.warn('Execution Halted: Volatility Spike');
+            return;
+        }
+
+        // Execute
         this.state.executionLock = true;
-        this.logger.info(`Executing ${direction.toUpperCase()} | Stake: ${stake}`);
+        this.lastTradeCandleTime = candleTime;
+        this.logger.info(`Executing ${direction.toUpperCase()} | Stake: $${stake.toFixed(2)}`);
 
         this.api.placeTrade(direction, stake, duration, this.state.symbol || 'R_100');
 
@@ -23,27 +36,32 @@ class ExecutionEngine {
         this._startWatchdog();
     }
 
-    onTradeResult(contract) {
+    finalizeTrade() {
         this._stopWatchdog();
-        // State update handled by Bot -> State
-        // Here we just release lock
-        // But strict mode: release lock only after settlement logic in Bot
-        // We provide a release method
+        this.state.executionLock = false;
+        // Cooldown handled in BotController
     }
 
-    releaseLock() {
+    forceUnlock() {
+        this._stopWatchdog();
         this.state.executionLock = false;
-        this.logger.info('Execution Lock Released');
+        this.logger.warn('Execution Lock Forced Open');
+    }
+
+    _detectVolatilitySpike() {
+        // Simple check: if last tick jumped > 3x average range
+        // Placeholder for now
+        return false;
     }
 
     _startWatchdog() {
         if (this.watchdogTimer) clearTimeout(this.watchdogTimer);
         this.watchdogTimer = setTimeout(() => {
             if (this.state.executionLock) {
-                this.logger.error('Watchdog: Trade Timeout. Forcing Unlock.');
-                this.releaseLock();
+                this.logger.error('Watchdog: Trade Timeout. Recovering...');
+                this.forceUnlock();
             }
-        }, 15000); // 15s max for 5t trade
+        }, 15000);
     }
 
     _stopWatchdog() {

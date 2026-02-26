@@ -2,33 +2,40 @@
 
 class ReinforcementEngine {
     constructor() {
-        // Weights for signals
         this.weights = {
             'trend_follow': 1.0,
             'mean_reversion': 1.0,
             'breakout': 1.0
         };
 
-        // Stats
         this.stats = {
-            'trend_follow': { wins: 0, total: 0 },
-            'mean_reversion': { wins: 0, total: 0 },
-            'breakout': { wins: 0, total: 0 }
+            'trend_follow': { score: 0, count: 0 },
+            'mean_reversion': { score: 0, count: 0 },
+            'breakout': { score: 0, count: 0 }
         };
     }
 
-    update(signalType, isWin) {
+    update(signalType, isWin, confidence) {
         if (!this.stats[signalType]) return;
 
-        this.stats[signalType].total++;
-        if (isWin) this.stats[signalType].wins++;
+        // Weighted Scoring
+        // Win: +1 * (Confidence/100)
+        // Loss: -1.5 * (Confidence/100) (Penalty for high confidence loss)
 
-        // Adjust Weight
-        const wr = this.stats[signalType].wins / this.stats[signalType].total;
+        const weight = confidence / 100;
+        const outcome = isWin ? 1.0 : -1.5;
+        const scoreChange = outcome * weight;
 
-        // Simple RL: Boost if WR > 55%, decay if < 45%
-        if (wr > 0.55) this.weights[signalType] = Math.min(1.5, this.weights[signalType] + 0.05);
-        else if (wr < 0.45) this.weights[signalType] = Math.max(0.5, this.weights[signalType] - 0.05);
+        this.stats[signalType].count++;
+        this.stats[signalType].score += scoreChange;
+
+        // Adjust Weight Dynamic
+        // Sigmoid-like clamping [0.5, 1.5]
+        const currentScore = this.stats[signalType].score;
+        let newWeight = 1.0 + (currentScore / 10);
+        newWeight = Math.max(0.5, Math.min(1.5, newWeight));
+
+        this.weights[signalType] = newWeight;
     }
 
     getScore(signalType) {
