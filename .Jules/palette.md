@@ -1,0 +1,3 @@
+## 2024-05-23 - Missing Event Listeners and CSS Utility Classes
+**Learning:** The application was missing the critical `setupEventListeners` function in `app.js`, causing navigation and modal interactions to fail silently (or throw ReferenceError). Additionally, utility classes like `.opacity-0` and `.pointer-events-none` were missing from the built CSS, breaking modal visibility toggling.
+**Action:** Always verify that event initialization functions called in `DOMContentLoaded` actually exist in the source code. When relying on utility classes for dynamic state (like modal visibility), verify they exist in the CSS or add them explicitly if the build process is unreliable.
