@@ -1,0 +1,3 @@
+## 2025-02-27 - Accessible Modal Transitions
+**Learning:** Transitioning elements to `opacity: 0` alone does not remove them from the accessibility tree or prevent click interception. `visibility: hidden` (or `display: none`) is required, but it cannot be animated directly.
+**Action:** Use a combination of `opacity` for visual transition and a `visibility: hidden` class (applied via `setTimeout` in JS or `transition-delay` in CSS) to remove the element from the DOM flow/a11y tree after the fade-out completes. Ensure `pointer-events: none` is also set on the container when hidden to prevent interaction during the fade out.
