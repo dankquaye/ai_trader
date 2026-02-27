@@ -666,12 +666,20 @@ function openModal(tradeId) {
 
     ui.modal.body.innerHTML = html;
     document.body.classList.add('modal-active');
-    ui.modal.el.classList.remove('opacity-0', 'pointer-events-none');
+    ui.modal.el.classList.remove('invisible', 'opacity-0', 'pointer-events-none');
+    ui.modal.el.setAttribute('aria-hidden', 'false');
+    // Set focus to close button for accessibility
+    const closeBtn = ui.modal.el.querySelector('.modal-close');
+    if (closeBtn) closeBtn.focus();
 }
 
 function closeModal() {
     document.body.classList.remove('modal-active');
     ui.modal.el.classList.add('opacity-0', 'pointer-events-none');
+    ui.modal.el.setAttribute('aria-hidden', 'true');
+    setTimeout(() => {
+        ui.modal.el.classList.add('invisible');
+    }, 300); // Match transition duration
 }
 
 window.updateTradeHistory = (history, totalProfit, wins, losses) => {
