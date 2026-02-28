@@ -1,0 +1,3 @@
+## 2024-03-01 - Modal and Close Button Accessibility Pattern
+**Learning:** Found a recurring pattern in the app's components where `<div>` elements are used for interactive controls (like the modal close button) without keyboard support or accessible names, and modals (`#reasoning-modal`) are missing `role="dialog"`, `aria-modal="true"`, and `aria-hidden` management. This makes the UI inaccessible to screen reader and keyboard users.
+**Action:** Always ensure modals have `role="dialog"`, `aria-modal="true"`, and use semantic `<button>` elements with clear `aria-label` attributes for icon-only interactive controls (like the close icon). Ensure focus management and state tracking (`aria-hidden`) is correctly applied when modals open and close.
