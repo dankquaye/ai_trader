@@ -666,12 +666,12 @@ function openModal(tradeId) {
 
     ui.modal.body.innerHTML = html;
     document.body.classList.add('modal-active');
-    ui.modal.el.classList.remove('opacity-0', 'pointer-events-none');
+    ui.modal.el.classList.remove('invisible', 'opacity-0', 'pointer-events-none');
 }
 
 function closeModal() {
     document.body.classList.remove('modal-active');
-    ui.modal.el.classList.add('opacity-0', 'pointer-events-none');
+    ui.modal.el.classList.add('invisible', 'opacity-0', 'pointer-events-none');
 }
 
 window.updateTradeHistory = (history, totalProfit, wins, losses) => {
@@ -832,6 +832,39 @@ function showToast(message, type = 'info') {
             if (idx > -1) activeToasts.splice(idx, 1);
         }, 300);
     }, 3000);
+}
+
+function setupEventListeners() {
+    // Navigation
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            ui.navBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            ui.pages.forEach(p => p.classList.add('hidden'));
+            const target = document.getElementById(btn.dataset.target);
+            if (target) target.classList.remove('hidden');
+        });
+    });
+
+    // Account Selector
+    if (ui.accountSelector) {
+        ui.accountSelector.addEventListener('change', (e) => {
+            bot.setAccountType(e.target.value);
+            showToast(`Switched to ${e.target.value} account`);
+        });
+    }
+
+    // Modal close
+    if (ui.modal && ui.modal.closes) {
+        ui.modal.closes.forEach(el => {
+            el.addEventListener('click', closeModal);
+        });
+    }
+
+    // Backtest
+    if (ui.backtest.runBtn) {
+        ui.backtest.runBtn.addEventListener('click', runBacktest);
+    }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
