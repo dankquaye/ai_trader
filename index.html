@@ -14,7 +14,11 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         .modal {
-            transition: opacity 0.25s ease;
+            transition: opacity 0.25s ease, visibility 0.25s ease;
+        }
+        .modal.invisible {
+            visibility: hidden;
+            pointer-events: none;
         }
         body.modal-active {
             overflow-x: hidden;
@@ -462,7 +466,12 @@
                                 </tr>
                             </thead>
                             <tbody id="trade-history-body">
-                                <!-- Rows will be added here -->
+                                <tr>
+                                    <td colspan="7" class="px-6 py-8 text-center text-gray-500 italic">
+                                        <i class="fa-solid fa-folder-open text-2xl mb-2 opacity-50 block"></i>
+                                        No trades executed yet. Start the bot to see history.
+                                    </td>
+                                </tr>
                             </tbody>
                         </table>
                     </div>
@@ -521,7 +530,7 @@
     </div>
 
     <!-- Trade Reasoning Modal -->
-    <div id="reasoning-modal" class="modal opacity-0 pointer-events-none fixed w-full h-full top-0 left-0 flex items-center justify-center z-50">
+    <div id="reasoning-modal" class="modal opacity-0 pointer-events-none invisible fixed w-full h-full top-0 left-0 flex items-center justify-center z-50">
         <div class="modal-overlay absolute w-full h-full bg-black opacity-75"></div>
         <div class="modal-container bg-gray-800 w-11/12 md:max-w-md mx-auto rounded shadow-lg z-50 overflow-y-auto max-h-[90vh]">
             <div class="modal-content py-4 text-left px-6">
