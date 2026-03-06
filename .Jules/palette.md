@@ -1,0 +1,3 @@
+## 2024-03-06 - Modal Intercepting Navigation Clicks
+**Learning:** Playwright interaction tests will consistently fail (TimeoutError) when a modal is only hidden using `opacity: 0` and `pointer-events: none` because the `.modal-overlay` element can still capture cursor events intended for underlying elements like `.nav-btn` unless it is explicitly made `invisible` or display `none`.
+**Action:** When creating new modals using Tailwind or base CSS, ensure that the `.invisible` utility class (`visibility: hidden`) is actively toggled in JS along with opacity transitions to guarantee hidden elements do not block navigation.
