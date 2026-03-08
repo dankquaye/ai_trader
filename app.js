@@ -179,20 +179,31 @@ async function runBacktest() {
         ui.backtest.logBody.innerHTML = '';
         const logs = [...result.trades].reverse().slice(0, 100);
 
-        logs.forEach(t => {
-            const tr = document.createElement('tr');
-            tr.className = 'border-b border-gray-700';
-            const color = t.result === 'WIN' ? 'text-green-400' : 'text-red-400';
-            tr.innerHTML = `
-                <td class="px-4 py-2">${t.time}</td>
-                <td class="px-4 py-2">${t.type}</td>
-                <td class="px-4 py-2">${t.entry.toFixed(2)}</td>
-                <td class="px-4 py-2">${t.exit.toFixed(2)}</td>
-                <td class="px-4 py-2 font-bold ${color}">${t.result}</td>
-                <td class="px-4 py-2 ${color}">$${t.profit.toFixed(2)}</td>
+        if (logs.length === 0) {
+            ui.backtest.logBody.innerHTML = `
+                <tr>
+                    <td colspan="6" class="px-6 py-8 text-center text-gray-500">
+                        <i class="fa-solid fa-flask text-3xl mb-3 text-gray-600"></i>
+                        <p>No trades found in simulation</p>
+                    </td>
+                </tr>
             `;
-            ui.backtest.logBody.appendChild(tr);
-        });
+        } else {
+            logs.forEach(t => {
+                const tr = document.createElement('tr');
+                tr.className = 'border-b border-gray-700';
+                const color = t.result === 'WIN' ? 'text-green-400' : 'text-red-400';
+                tr.innerHTML = `
+                    <td class="px-4 py-2">${t.time}</td>
+                    <td class="px-4 py-2">${t.type}</td>
+                    <td class="px-4 py-2">${t.entry.toFixed(2)}</td>
+                    <td class="px-4 py-2">${t.exit.toFixed(2)}</td>
+                    <td class="px-4 py-2 font-bold ${color}">${t.result}</td>
+                    <td class="px-4 py-2 ${color}">$${t.profit.toFixed(2)}</td>
+                `;
+                ui.backtest.logBody.appendChild(tr);
+            });
+        }
 
         ui.backtest.results.classList.remove('hidden');
 
@@ -680,25 +691,37 @@ window.updateTradeHistory = (history, totalProfit, wins, losses) => {
     ui.historyTable.innerHTML = '';
     const displayHistory = [...history].reverse().slice(0, 50);
 
-    displayHistory.forEach((trade, index) => {
-        const originalIndex = history.length - 1 - index;
-        const tr = document.createElement('tr');
-        tr.className = 'border-b border-gray-700 hover:bg-gray-700 transition cursor-pointer';
-        const color = trade.profit >= 0 ? 'text-green-400' : 'text-red-400';
-        const gradeColor = trade.grade?.startsWith('A') ? 'text-green-400' : (trade.grade === 'F' ? 'text-red-500' : 'text-gray-400');
-
-        tr.innerHTML = `
-            <td class="px-6 py-4">${trade.time}</td>
-            <td class="px-6 py-4">${trade.symbol}</td>
-            <td class="px-6 py-4">${trade.type}</td>
-            <td class="px-6 py-4">$${trade.stake}</td>
-            <td class="px-6 py-4 font-bold ${color}">$${trade.profit.toFixed(2)}</td>
-            <td class="px-6 py-4 font-bold ${gradeColor}">${trade.grade || '-'}</td>
-            <td class="px-6 py-4"><button class="text-xs bg-blue-900 text-blue-300 px-2 py-1 rounded hover:bg-blue-800" onclick="event.stopPropagation(); openModal(${originalIndex})"><i class="fa-solid fa-magnifying-glass"></i> Details</button></td>
+    if (displayHistory.length === 0) {
+        ui.historyTable.innerHTML = `
+            <tr>
+                <td colspan="7" class="px-6 py-12 text-center text-gray-500">
+                    <i class="fa-solid fa-folder-open text-4xl mb-3 text-gray-600"></i>
+                    <p class="text-lg">No trades yet</p>
+                    <p class="text-xs mt-1">Start the bot to see history</p>
+                </td>
+            </tr>
         `;
-        tr.onclick = () => openModal(originalIndex);
-        ui.historyTable.appendChild(tr);
-    });
+    } else {
+        displayHistory.forEach((trade, index) => {
+            const originalIndex = history.length - 1 - index;
+            const tr = document.createElement('tr');
+            tr.className = 'border-b border-gray-700 hover:bg-gray-700 transition cursor-pointer';
+            const color = trade.profit >= 0 ? 'text-green-400' : 'text-red-400';
+            const gradeColor = trade.grade?.startsWith('A') ? 'text-green-400' : (trade.grade === 'F' ? 'text-red-500' : 'text-gray-400');
+
+            tr.innerHTML = `
+                <td class="px-6 py-4">${trade.time}</td>
+                <td class="px-6 py-4">${trade.symbol}</td>
+                <td class="px-6 py-4">${trade.type}</td>
+                <td class="px-6 py-4">$${trade.stake}</td>
+                <td class="px-6 py-4 font-bold ${color}">$${trade.profit.toFixed(2)}</td>
+                <td class="px-6 py-4 font-bold ${gradeColor}">${trade.grade || '-'}</td>
+                <td class="px-6 py-4"><button class="text-xs bg-blue-900 text-blue-300 px-2 py-1 rounded hover:bg-blue-800" onclick="event.stopPropagation(); openModal(${originalIndex})"><i class="fa-solid fa-magnifying-glass"></i> Details</button></td>
+            `;
+            tr.onclick = () => openModal(originalIndex);
+            ui.historyTable.appendChild(tr);
+        });
+    }
 };
 
 function aggregateTick(time, price) {
