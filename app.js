@@ -666,12 +666,14 @@ function openModal(tradeId) {
 
     ui.modal.body.innerHTML = html;
     document.body.classList.add('modal-active');
-    ui.modal.el.classList.remove('opacity-0', 'pointer-events-none');
+    ui.modal.el.classList.remove('invisible', 'opacity-0');
+    ui.modal.el.setAttribute('aria-hidden', 'false');
 }
 
 function closeModal() {
     document.body.classList.remove('modal-active');
-    ui.modal.el.classList.add('opacity-0', 'pointer-events-none');
+    ui.modal.el.classList.add('invisible', 'opacity-0');
+    ui.modal.el.setAttribute('aria-hidden', 'true');
 }
 
 window.updateTradeHistory = (history, totalProfit, wins, losses) => {
@@ -679,6 +681,11 @@ window.updateTradeHistory = (history, totalProfit, wins, losses) => {
     ui.botTotalProfit.className = totalProfit >= 0 ? 'font-bold text-green-400' : 'font-bold text-red-400';
     ui.historyTable.innerHTML = '';
     const displayHistory = [...history].reverse().slice(0, 50);
+
+    if (displayHistory.length === 0) {
+        ui.historyTable.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-gray-500"><i class="fa-solid fa-folder-open text-3xl mb-2"></i><br>No trades yet</td></tr>';
+        return;
+    }
 
     displayHistory.forEach((trade, index) => {
         const originalIndex = history.length - 1 - index;
@@ -832,6 +839,24 @@ function showToast(message, type = 'info') {
             if (idx > -1) activeToasts.splice(idx, 1);
         }, 300);
     }, 3000);
+}
+
+function setupEventListeners() {
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            ui.navBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            ui.pages.forEach(p => p.classList.add('hidden'));
+            document.getElementById(btn.dataset.target).classList.remove('hidden');
+        });
+    });
+
+    ui.modal.closes.forEach(btn => btn.addEventListener('click', closeModal));
+
+    // Optional: Close modal on overlay click
+    ui.modal.el.addEventListener('click', (e) => {
+        if (e.target.classList.contains('modal-overlay')) closeModal();
+    });
 }
 
 document.addEventListener('DOMContentLoaded', () => {
