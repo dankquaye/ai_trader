@@ -633,6 +633,8 @@ function openModal(tradeId) {
     if (!trade) return;
     const r = trade.reasoning;
 
+    ui.modal.el.setAttribute('aria-hidden', 'false');
+
     let html = `
         <div class="mb-4">
             <h5 class="font-bold text-gray-400 uppercase text-xs mb-1">Overview</h5>
@@ -666,12 +668,13 @@ function openModal(tradeId) {
 
     ui.modal.body.innerHTML = html;
     document.body.classList.add('modal-active');
-    ui.modal.el.classList.remove('opacity-0', 'pointer-events-none');
+    ui.modal.el.classList.remove('opacity-0', 'pointer-events-none', 'invisible');
 }
 
 function closeModal() {
+    ui.modal.el.setAttribute('aria-hidden', 'true');
     document.body.classList.remove('modal-active');
-    ui.modal.el.classList.add('opacity-0', 'pointer-events-none');
+    ui.modal.el.classList.add('opacity-0', 'pointer-events-none', 'invisible');
 }
 
 window.updateTradeHistory = (history, totalProfit, wins, losses) => {
@@ -832,6 +835,83 @@ function showToast(message, type = 'info') {
             if (idx > -1) activeToasts.splice(idx, 1);
         }, 300);
     }, 3000);
+}
+
+function setupEventListeners() {
+    // Navigation
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            ui.navBtns.forEach(b => b.classList.remove('active', 'text-blue-400'));
+            const target = e.currentTarget.dataset.target;
+            e.currentTarget.classList.add('active', 'text-blue-400');
+            ui.pages.forEach(p => p.classList.add('hidden'));
+            document.getElementById(target).classList.remove('hidden');
+        });
+    });
+
+    // Account Switcher
+    ui.accountSelector.addEventListener('change', (e) => {
+        bot.setAccountType(e.target.value);
+    });
+
+    // Bot Controls
+    ui.btns.startBot.addEventListener('click', () => {
+        bot.start();
+        ui.btns.startBot.classList.add('hidden');
+        ui.btns.stopBot.classList.remove('hidden');
+        ui.btns.pauseBot.classList.remove('hidden');
+    });
+
+    ui.btns.stopBot.addEventListener('click', () => {
+        bot.stop();
+        ui.btns.startBot.classList.remove('hidden');
+        ui.btns.stopBot.classList.add('hidden');
+        ui.btns.pauseBot.classList.add('hidden');
+        ui.btns.pauseBot.innerHTML = '<i class="fa-solid fa-pause"></i>';
+        ui.btns.pauseBot.setAttribute('aria-label', 'Pause Bot');
+    });
+
+    ui.btns.pauseBot.addEventListener('click', () => {
+        bot.togglePause();
+        if (bot.isPaused) {
+            ui.btns.pauseBot.innerHTML = '<i class="fa-solid fa-play"></i>';
+            ui.btns.pauseBot.setAttribute('aria-label', 'Resume Bot');
+            showToast('Bot Paused', 'info');
+        } else {
+            ui.btns.pauseBot.innerHTML = '<i class="fa-solid fa-pause"></i>';
+            ui.btns.pauseBot.setAttribute('aria-label', 'Pause Bot');
+            showToast('Bot Resumed', 'info');
+        }
+    });
+
+    // Strategy & Settings changes
+    ui.botSettings.strategy.addEventListener('change', (e) => {
+        renderStrategyParams(e.target.value);
+        saveSettings();
+    });
+
+    ui.botSettings.autoSelect.addEventListener('change', (e) => {
+        if (e.target.checked) startAutoScanner();
+        else stopAutoScanner();
+        saveSettings();
+    });
+
+    // Presets
+    document.querySelectorAll('.btn-preset').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            applyPreset(e.currentTarget.dataset.preset);
+        });
+    });
+
+    // Modal
+    ui.modal.closes.forEach(btn => {
+        btn.addEventListener('click', closeModal);
+    });
+
+    // Backtest
+    if(ui.backtest.runBtn) {
+        ui.backtest.runBtn.addEventListener('click', runBacktest);
+    }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
