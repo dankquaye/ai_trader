@@ -666,12 +666,14 @@ function openModal(tradeId) {
 
     ui.modal.body.innerHTML = html;
     document.body.classList.add('modal-active');
-    ui.modal.el.classList.remove('opacity-0', 'pointer-events-none');
+    ui.modal.el.classList.remove('invisible', 'opacity-0', 'pointer-events-none');
+    ui.modal.el.setAttribute('aria-hidden', 'false');
 }
 
 function closeModal() {
     document.body.classList.remove('modal-active');
-    ui.modal.el.classList.add('opacity-0', 'pointer-events-none');
+    ui.modal.el.classList.add('invisible', 'opacity-0', 'pointer-events-none');
+    ui.modal.el.setAttribute('aria-hidden', 'true');
 }
 
 window.updateTradeHistory = (history, totalProfit, wins, losses) => {
@@ -832,6 +834,42 @@ function showToast(message, type = 'info') {
             if (idx > -1) activeToasts.splice(idx, 1);
         }, 300);
     }, 3000);
+}
+
+function setupEventListeners() {
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            ui.navBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            ui.pages.forEach(p => p.classList.add('hidden'));
+            document.getElementById(btn.dataset.target).classList.remove('hidden');
+        });
+    });
+
+    ui.modal.closes.forEach(btn => btn.addEventListener('click', closeModal));
+
+    ui.modal.el.addEventListener('click', (e) => {
+        if (e.target.classList.contains('modal-overlay')) closeModal();
+    });
+
+    if (ui.accountSelector) {
+        ui.accountSelector.addEventListener('change', (e) => {
+            const type = e.target.value;
+            bot.setAccountType(type);
+            api.setAccountType(type);
+            showToast(`Account type switched to ${type.toUpperCase()}`, 'info');
+        });
+    }
+
+    if (ui.btns.pauseBot) {
+        ui.btns.pauseBot.addEventListener('click', () => {
+            bot.togglePause();
+            const isPaused = bot.isPaused;
+            ui.btns.pauseBot.innerHTML = isPaused ? '<i class="fa-solid fa-play"></i>' : '<i class="fa-solid fa-pause"></i>';
+            ui.btns.pauseBot.setAttribute('aria-label', isPaused ? 'Resume Bot' : 'Pause Bot');
+            showToast(isPaused ? 'Bot Paused' : 'Bot Resumed', 'info');
+        });
+    }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
