@@ -834,6 +834,27 @@ function showToast(message, type = 'info') {
     }, 3000);
 }
 
+function setupEventListeners() {
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const targetId = btn.dataset.target;
+            ui.pages.forEach(p => p.classList.add('hidden'));
+            document.getElementById(targetId).classList.remove('hidden');
+            ui.navBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            if (targetId === 'backtest') initBacktestChart();
+        });
+    });
+
+    ui.modal.closes.forEach(btn => btn.addEventListener('click', closeModal));
+    ui.modal.el.addEventListener('click', (e) => {
+        if (e.target === ui.modal.el || e.target.classList.contains('modal-overlay')) closeModal();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && document.body.classList.contains('modal-active')) closeModal();
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     try {
         initChart();

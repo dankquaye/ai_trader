@@ -1,0 +1,3 @@
+## 2026-01-19 - Convert modal close button to semantic button
+**Learning:** The Trade Reasoning Modal originally used a generic `<div>` with `cursor-pointer` to act as a close button. This prevents users relying on keyboards and screen readers from effectively discovering and interacting with the button. Modals in Tailwind/Playwright environments must explicitly define missing utility classes like `.opacity-0` and `.pointer-events-none` in a style block if no build step generates them, to avoid invisible modals intercepting pointer events.
+**Action:** When creating modals, always use semantic `<button>` elements for close actions, provide an explicit `aria-label`, and ensure hidden modal containers have `pointer-events: none` applied.
