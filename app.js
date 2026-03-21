@@ -346,6 +346,95 @@ function initChart() {
 
 // --- UI Logic ---
 
+function setupEventListeners() {
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            ui.navBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            ui.pages.forEach(p => p.classList.add('hidden'));
+            document.getElementById(btn.dataset.target).classList.remove('hidden');
+        });
+    });
+
+    if (ui.accountSelector) {
+        ui.accountSelector.addEventListener('change', (e) => {
+            if (window.bot) window.bot.setAccountType(e.target.value);
+        });
+    }
+
+    if (ui.btns.startBot) {
+        ui.btns.startBot.addEventListener('click', () => {
+            if (window.bot) {
+                window.bot.start();
+                ui.btns.startBot.classList.add('hidden');
+                ui.btns.stopBot.classList.remove('hidden');
+                ui.btns.pauseBot.classList.remove('hidden');
+            }
+        });
+    }
+
+    if (ui.btns.stopBot) {
+        ui.btns.stopBot.addEventListener('click', () => {
+            if (window.bot) {
+                window.bot.stop();
+                ui.btns.startBot.classList.remove('hidden');
+                ui.btns.stopBot.classList.add('hidden');
+                ui.btns.pauseBot.classList.add('hidden');
+            }
+        });
+    }
+
+    if (ui.btns.pauseBot) {
+        ui.btns.pauseBot.setAttribute('aria-label', 'Pause Bot');
+        ui.btns.pauseBot.addEventListener('click', () => {
+            if (window.bot) {
+                window.bot.isPaused = !window.bot.isPaused;
+                const icon = ui.btns.pauseBot.querySelector('i');
+                if (window.bot.isPaused) {
+                    if(icon) { icon.classList.remove('fa-pause'); icon.classList.add('fa-play'); }
+                    ui.btns.pauseBot.setAttribute('aria-label', 'Resume Bot');
+                } else {
+                    if(icon) { icon.classList.remove('fa-play'); icon.classList.add('fa-pause'); }
+                    ui.btns.pauseBot.setAttribute('aria-label', 'Pause Bot');
+                }
+            }
+        });
+    }
+
+    if (ui.botSettings.strategy) {
+        ui.botSettings.strategy.addEventListener('change', (e) => {
+            renderStrategyParams(e.target.value);
+            saveSettings();
+        });
+    }
+
+    if (ui.botSettings.autoSelect) {
+        ui.botSettings.autoSelect.addEventListener('change', (e) => {
+            if (e.target.checked) startAutoScanner();
+            else stopAutoScanner();
+            saveSettings();
+        });
+    }
+
+    if (ui.btns.exportHistory) {
+        ui.btns.exportHistory.addEventListener('click', exportHistory);
+    }
+
+    if (ui.modal.closes) {
+        ui.modal.closes.forEach(btn => {
+            btn.addEventListener('click', closeModal);
+        });
+    }
+
+    document.querySelectorAll('.btn-preset').forEach(btn => {
+        btn.addEventListener('click', (e) => applyPreset(e.currentTarget.dataset.preset));
+    });
+
+    if (ui.backtest && ui.backtest.runBtn) {
+        ui.backtest.runBtn.addEventListener('click', runBacktest);
+    }
+}
+
 function renderStrategyParams(strategy) {
     const container = ui.botSettings.strategyParams;
     container.innerHTML = '';
@@ -666,12 +755,12 @@ function openModal(tradeId) {
 
     ui.modal.body.innerHTML = html;
     document.body.classList.add('modal-active');
-    ui.modal.el.classList.remove('opacity-0', 'pointer-events-none');
+    ui.modal.el.classList.remove('opacity-0', 'pointer-events-none', 'invisible');
 }
 
 function closeModal() {
     document.body.classList.remove('modal-active');
-    ui.modal.el.classList.add('opacity-0', 'pointer-events-none');
+    ui.modal.el.classList.add('opacity-0', 'pointer-events-none', 'invisible');
 }
 
 window.updateTradeHistory = (history, totalProfit, wins, losses) => {
