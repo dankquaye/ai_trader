@@ -680,6 +680,19 @@ window.updateTradeHistory = (history, totalProfit, wins, losses) => {
     ui.historyTable.innerHTML = '';
     const displayHistory = [...history].reverse().slice(0, 50);
 
+    if (displayHistory.length === 0) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td colspan="7" class="px-6 py-12 text-center text-gray-500">
+                <i class="fa-solid fa-inbox text-4xl mb-3 opacity-50"></i>
+                <p class="text-sm">No trades have been executed yet.</p>
+                <p class="text-xs opacity-75 mt-1">Start the bot to see your history here.</p>
+            </td>
+        `;
+        ui.historyTable.appendChild(tr);
+        return;
+    }
+
     displayHistory.forEach((trade, index) => {
         const originalIndex = history.length - 1 - index;
         const tr = document.createElement('tr');
@@ -846,3 +859,38 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast('Initialization Error: ' + e.message, 'error');
     }
 });
+function setupEventListeners() {
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            ui.navBtns.forEach(b => b.classList.remove('active', 'text-blue-400'));
+            btn.classList.add('active', 'text-blue-400');
+            ui.pages.forEach(p => p.classList.add('hidden'));
+            const target = document.getElementById(btn.dataset.target);
+            if(target) target.classList.remove('hidden');
+        });
+    });
+
+    ui.modal.closes.forEach(btn => btn.addEventListener('click', closeModal));
+
+    if (ui.accountSelector) {
+        ui.accountSelector.addEventListener('change', (e) => {
+            const val = e.target.value;
+            if (bot && bot.setAccountType) bot.setAccountType(val);
+            if (api && api.setAccountType) api.setAccountType(val);
+        });
+    }
+
+    document.querySelectorAll('.btn-preset').forEach(btn => {
+        btn.addEventListener('click', () => applyPreset(btn.dataset.preset));
+    });
+
+    if (ui.backtest.runBtn) ui.backtest.runBtn.addEventListener('click', runBacktest);
+
+    // Strategy params
+    if (ui.botSettings.strategy) {
+        ui.botSettings.strategy.addEventListener('change', (e) => {
+            renderStrategyParams(e.target.value);
+            saveSettings();
+        });
+    }
+}
