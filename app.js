@@ -666,18 +666,31 @@ function openModal(tradeId) {
 
     ui.modal.body.innerHTML = html;
     document.body.classList.add('modal-active');
-    ui.modal.el.classList.remove('opacity-0', 'pointer-events-none');
+    ui.modal.el.classList.remove('invisible', 'opacity-0', 'pointer-events-none');
 }
 
 function closeModal() {
     document.body.classList.remove('modal-active');
-    ui.modal.el.classList.add('opacity-0', 'pointer-events-none');
+    ui.modal.el.classList.add('invisible', 'opacity-0', 'pointer-events-none');
 }
 
 window.updateTradeHistory = (history, totalProfit, wins, losses) => {
     ui.botTotalProfit.innerText = `$${totalProfit.toFixed(2)}`;
     ui.botTotalProfit.className = totalProfit >= 0 ? 'font-bold text-green-400' : 'font-bold text-red-400';
     ui.historyTable.innerHTML = '';
+
+    if (!history || history.length === 0) {
+        ui.historyTable.innerHTML = `
+            <tr>
+                <td colspan="7" class="px-6 py-8 text-center text-gray-500">
+                    <i class="fa-solid fa-folder-open text-3xl mb-2 opacity-50 block"></i>
+                    <p>No trade history available yet.</p>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
     const displayHistory = [...history].reverse().slice(0, 50);
 
     displayHistory.forEach((trade, index) => {
@@ -712,6 +725,64 @@ function aggregateTick(time, price) {
         currentCandle.close = price;
         return { isNew: false, candle: currentCandle };
     }
+}
+
+function setupEventListeners() {
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            ui.navBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            ui.pages.forEach(p => p.classList.add('hidden'));
+            document.getElementById(btn.dataset.target).classList.remove('hidden');
+        });
+    });
+
+    if (ui.accountSelector) {
+        ui.accountSelector.addEventListener('change', () => {
+            const type = ui.accountSelector.value;
+            bot.setAccountType(type);
+            api.setAccountType(type);
+            showToast(`Switched to ${type.toUpperCase()} account`);
+        });
+    }
+
+    if (ui.btns.startBot) ui.btns.startBot.addEventListener('click', () => {
+        bot.start();
+        ui.btns.startBot.classList.add('hidden');
+        ui.btns.stopBot.classList.remove('hidden');
+        ui.btns.pauseBot.classList.remove('hidden');
+    });
+
+    if (ui.btns.stopBot) ui.btns.stopBot.addEventListener('click', () => {
+        bot.stop();
+        ui.btns.startBot.classList.remove('hidden');
+        ui.btns.stopBot.classList.add('hidden');
+        ui.btns.pauseBot.classList.add('hidden');
+    });
+
+    if (ui.btns.pauseBot) ui.btns.pauseBot.addEventListener('click', () => {
+        const isPaused = bot.togglePause();
+        const icon = ui.btns.pauseBot.querySelector('i');
+        if (isPaused) {
+            ui.btns.pauseBot.setAttribute('aria-label', 'Resume Bot');
+            icon.className = 'fa-solid fa-play';
+        } else {
+            ui.btns.pauseBot.setAttribute('aria-label', 'Pause Bot');
+            icon.className = 'fa-solid fa-pause';
+        }
+    });
+
+    if (ui.btns.killSwitch) ui.btns.killSwitch.addEventListener('click', () => bot.stop());
+
+    if (ui.backtest.runBtn) ui.backtest.runBtn.addEventListener('click', runBacktest);
+
+    if (ui.btns.exportHistory) ui.btns.exportHistory.addEventListener('click', exportHistory);
+
+    document.querySelectorAll('.btn-preset').forEach(btn => {
+        btn.addEventListener('click', () => applyPreset(btn.dataset.preset));
+    });
+
+    ui.modal.closes.forEach(btn => btn.addEventListener('click', closeModal));
 }
 
 // --- API Events ---
