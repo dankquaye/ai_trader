@@ -521,16 +521,16 @@
     </div>
 
     <!-- Trade Reasoning Modal -->
-    <div id="reasoning-modal" class="modal opacity-0 pointer-events-none fixed w-full h-full top-0 left-0 flex items-center justify-center z-50">
+    <div id="reasoning-modal" class="modal invisible opacity-0 pointer-events-none fixed w-full h-full top-0 left-0 flex items-center justify-center z-50" role="dialog" aria-modal="true" aria-hidden="true">
         <div class="modal-overlay absolute w-full h-full bg-black opacity-75"></div>
         <div class="modal-container bg-gray-800 w-11/12 md:max-w-md mx-auto rounded shadow-lg z-50 overflow-y-auto max-h-[90vh]">
             <div class="modal-content py-4 text-left px-6">
                 <!-- Title -->
                 <div class="flex justify-between items-center pb-3 border-b border-gray-700">
                     <p class="text-2xl font-bold">Trade Analysis</p>
-                    <div class="modal-close cursor-pointer z-50">
-                        <i class="fa-solid fa-xmark text-xl"></i>
-                    </div>
+                    <button type="button" class="modal-close cursor-pointer z-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded p-1 text-gray-400 hover:text-white transition" aria-label="Close Analysis">
+                        <i class="fa-solid fa-xmark text-xl" aria-hidden="true"></i>
+                    </button>
                 </div>
 
                 <!-- Body -->
