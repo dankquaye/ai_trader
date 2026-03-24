@@ -666,12 +666,14 @@ function openModal(tradeId) {
 
     ui.modal.body.innerHTML = html;
     document.body.classList.add('modal-active');
-    ui.modal.el.classList.remove('opacity-0', 'pointer-events-none');
+    ui.modal.el.classList.remove('opacity-0', 'pointer-events-none', 'invisible');
+    ui.modal.el.setAttribute('aria-hidden', 'false');
 }
 
 function closeModal() {
     document.body.classList.remove('modal-active');
-    ui.modal.el.classList.add('opacity-0', 'pointer-events-none');
+    ui.modal.el.classList.add('opacity-0', 'pointer-events-none', 'invisible');
+    ui.modal.el.setAttribute('aria-hidden', 'true');
 }
 
 window.updateTradeHistory = (history, totalProfit, wins, losses) => {
@@ -846,3 +848,89 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast('Initialization Error: ' + e.message, 'error');
     }
 });
+
+function setupEventListeners() {
+    // Navigation
+    const navBtns = document.querySelectorAll('.nav-btn');
+    const sections = document.querySelectorAll('.page-section');
+
+    navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            navBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            const targetId = btn.getAttribute('data-target');
+            sections.forEach(section => {
+                if(section.id === targetId) {
+                    section.classList.remove('hidden');
+                } else {
+                    section.classList.add('hidden');
+                }
+            });
+        });
+    });
+
+    // Preset Setup
+    document.querySelectorAll('.btn-preset').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const preset = btn.getAttribute('data-preset');
+            if (window.bot) {
+                // simple apply preset logic if applyPreset exists
+                if (typeof applyPreset === 'function') applyPreset(preset);
+            }
+        });
+    });
+
+    // Modal Close
+    ui.modal.closes.forEach(btn => {
+        btn.addEventListener('click', closeModal);
+    });
+
+    // Other inputs and selects
+    const inputs = [
+        'assetSelector', 'botStrategy', 'botRisk', 'durationInput', 'stakeInput',
+        'useDynamicDuration', 'useAiFilter', 'useFilter', 'adxThreshold', 'avoidSqueeze',
+        'useMartingale', 'smartRisk', 'martingaleMultiplier', 'takeProfit', 'stopLoss',
+        'autoSelectAsset', 'lockParams'
+    ];
+    inputs.forEach(key => {
+        if(ui[key]) {
+            ui[key].addEventListener('change', () => {
+                if(typeof updateBotParams === 'function') updateBotParams();
+                if(typeof saveSettings === 'function') saveSettings();
+            });
+        }
+    });
+
+    // Buttons
+    if(ui.btns.startBot) {
+        ui.btns.startBot.addEventListener('click', () => {
+            if (window.bot && typeof window.bot.start === 'function') window.bot.start();
+        });
+    }
+    if(ui.btns.stopBot) {
+        ui.btns.stopBot.addEventListener('click', () => {
+            if (window.bot && typeof window.bot.stop === 'function') window.bot.stop();
+        });
+    }
+
+    // Account Selector
+    if(ui.accountSelector) {
+        ui.accountSelector.addEventListener('change', () => {
+             // Handle account type switch
+             if (window.bot && typeof window.bot.setAccountType === 'function') {
+                 window.bot.setAccountType(ui.accountSelector.value);
+             }
+        });
+    }
+
+    if(ui.btns.pauseBot) {
+        ui.btns.pauseBot.addEventListener('click', () => {
+            if (window.bot) {
+                window.bot.isPaused = !window.bot.isPaused;
+                ui.btns.pauseBot.innerHTML = window.bot.isPaused ? '<i class="fa-solid fa-play"></i>' : '<i class="fa-solid fa-pause"></i>';
+                ui.btns.pauseBot.setAttribute('aria-label', window.bot.isPaused ? 'Resume Bot' : 'Pause Bot');
+            }
+        });
+    }
+}
