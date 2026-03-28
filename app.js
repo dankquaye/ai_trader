@@ -678,6 +678,19 @@ window.updateTradeHistory = (history, totalProfit, wins, losses) => {
     ui.botTotalProfit.innerText = `$${totalProfit.toFixed(2)}`;
     ui.botTotalProfit.className = totalProfit >= 0 ? 'font-bold text-green-400' : 'font-bold text-red-400';
     ui.historyTable.innerHTML = '';
+
+    if (!history || history.length === 0) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td colspan="7" class="px-6 py-12 text-center text-gray-500">
+                <i class="fa-solid fa-folder-open text-gray-600 text-3xl mb-3"></i>
+                <p class="text-gray-400 text-sm">No trades yet. Start the bot to see history.</p>
+            </td>
+        `;
+        ui.historyTable.appendChild(tr);
+        return;
+    }
+
     const displayHistory = [...history].reverse().slice(0, 50);
 
     displayHistory.forEach((trade, index) => {
@@ -846,3 +859,150 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast('Initialization Error: ' + e.message, 'error');
     }
 });
+function setupEventListeners() {
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            ui.navBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const target = btn.dataset.target;
+            ui.pages.forEach(p => p.classList.add('hidden'));
+            document.getElementById(target).classList.remove('hidden');
+        });
+    });
+
+    ui.accountSelector.addEventListener('change', () => {
+        api.setAccountType(ui.accountSelector.value);
+        if(bot) bot.setAccountType(ui.accountSelector.value);
+    });
+
+    ui.assetSelector.addEventListener('change', () => {
+        const symbol = ui.assetSelector.value;
+        if(api.ws.readyState === WebSocket.OPEN) {
+             api.subscribeTicks(symbol);
+             api.subscribeCandles(symbol, 60);
+             api.subscribeCandles(symbol, 300);
+             api.getHistory(symbol);
+        }
+        if(bot) bot.resetState();
+    });
+
+    ui.botSettings.strategy.addEventListener('change', () => {
+        renderStrategyParams(ui.botSettings.strategy.value);
+        saveSettings();
+    });
+
+    ui.botSettings.autoSelect.addEventListener('change', () => {
+        if(ui.botSettings.autoSelect.checked) startAutoScanner();
+        else stopAutoScanner();
+        saveSettings();
+    });
+
+    ui.botSettings.lockParams.addEventListener('change', () => {
+        if(bot) bot.setParamLock(ui.botSettings.lockParams.checked);
+        saveSettings();
+    });
+
+    const standardInputs = [
+        ui.inputs.duration, ui.inputs.stake,
+        ui.botSettings.risk, ui.botSettings.useMartingale,
+        ui.botSettings.useSmartRisk, ui.botSettings.martingaleMultiplier,
+        ui.botSettings.takeProfit, ui.botSettings.stopLoss,
+        ui.botSettings.useFilter, ui.botSettings.adxThreshold,
+        ui.botSettings.avoidSqueeze
+    ];
+
+    standardInputs.forEach(input => {
+        if (input) {
+            input.addEventListener('change', saveSettings);
+        }
+    });
+
+    ui.btns.rise.addEventListener('click', () => {
+        bot.placeTrade('CALL', ui.assetSelector.value, ui.inputs.stake.value, ui.inputs.duration.value);
+    });
+
+    ui.btns.fall.addEventListener('click', () => {
+        bot.placeTrade('PUT', ui.assetSelector.value, ui.inputs.stake.value, ui.inputs.duration.value);
+    });
+
+    ui.btns.startBot.addEventListener('click', () => {
+        const config = {
+            strategy: ui.botSettings.strategy.value,
+            risk: ui.botSettings.risk.value,
+            duration: parseInt(ui.inputs.duration.value),
+            stake: parseFloat(ui.inputs.stake.value),
+            asset: ui.assetSelector.value,
+            useMartingale: ui.botSettings.useMartingale.checked,
+            martingaleMultiplier: parseFloat(ui.botSettings.martingaleMultiplier.value),
+            takeProfit: parseFloat(ui.botSettings.takeProfit.value),
+            stopLoss: parseFloat(ui.botSettings.stopLoss.value),
+            useFilter: ui.botSettings.useFilter.checked,
+            adxThreshold: parseInt(ui.botSettings.adxThreshold.value),
+            avoidSqueeze: ui.botSettings.avoidSqueeze.checked,
+            useAIFilter: ui.botSettings.useAIFilter.checked
+        };
+        bot.setConfig(config);
+        bot.start();
+        ui.btns.startBot.classList.add('hidden');
+        ui.btns.stopBot.classList.remove('hidden');
+        ui.btns.pauseBot.classList.remove('hidden');
+        ui.btns.pauseBot.innerHTML = '<i class="fa-solid fa-pause"></i>';
+        ui.btns.pauseBot.setAttribute('aria-label', 'Pause Bot');
+        showToast('Bot Started', 'success');
+    });
+
+    ui.btns.stopBot.addEventListener('click', () => {
+        bot.stop();
+        ui.btns.stopBot.classList.add('hidden');
+        ui.btns.pauseBot.classList.add('hidden');
+        ui.btns.startBot.classList.remove('hidden');
+        showToast('Bot Stopped', 'error');
+    });
+
+    ui.btns.pauseBot.addEventListener('click', () => {
+        if (!bot.isRunning) return;
+        bot.isPaused = !bot.isPaused;
+        if (bot.isPaused) {
+            ui.btns.pauseBot.innerHTML = '<i class="fa-solid fa-play"></i>';
+            ui.btns.pauseBot.setAttribute('aria-label', 'Resume Bot');
+            ui.btns.pauseBot.classList.replace('bg-yellow-600', 'bg-green-600');
+            ui.btns.pauseBot.classList.replace('hover:bg-yellow-500', 'hover:bg-green-500');
+            showToast('Bot Paused', 'info');
+        } else {
+            ui.btns.pauseBot.innerHTML = '<i class="fa-solid fa-pause"></i>';
+            ui.btns.pauseBot.setAttribute('aria-label', 'Pause Bot');
+            ui.btns.pauseBot.classList.replace('bg-green-600', 'bg-yellow-600');
+            ui.btns.pauseBot.classList.replace('hover:bg-green-500', 'hover:bg-yellow-500');
+            showToast('Bot Resumed', 'info');
+        }
+    });
+
+    ui.btns.killSwitch.addEventListener('click', () => {
+         if(bot) bot.stop();
+         ui.btns.stopBot.classList.add('hidden');
+         ui.btns.pauseBot.classList.add('hidden');
+         ui.btns.startBot.classList.remove('hidden');
+         showToast('EMERGENCY STOP ACTIVATED', 'error');
+    });
+
+    document.querySelectorAll('.btn-preset').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const preset = e.currentTarget.dataset.preset;
+            applyPreset(preset);
+        });
+    });
+
+    ui.btns.exportHistory.addEventListener('click', exportHistory);
+
+    ui.modal.closes.forEach(btn => {
+        btn.addEventListener('click', closeModal);
+    });
+
+    ui.modal.el.addEventListener('click', (e) => {
+        if(e.target === ui.modal.el || e.target.classList.contains('modal-overlay')) {
+             closeModal();
+        }
+    });
+
+    ui.backtest.runBtn.addEventListener('click', runBacktest);
+}

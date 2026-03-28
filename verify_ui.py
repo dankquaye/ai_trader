@@ -12,6 +12,9 @@ def run(playwright):
     # Wait for DOM
     page.wait_for_load_state("domcontentloaded")
 
+    # Workaround for modal intercepting clicks
+    page.evaluate("document.getElementById('reasoning-modal').style.display = 'none';")
+
     # 1. Switch to "Auto" (AI Robot) tab
     print("Navigating to Auto tab...")
     # The nav buttons have icons and text, let's find by text "Auto"
