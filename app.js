@@ -183,12 +183,15 @@ async function runBacktest() {
             const tr = document.createElement('tr');
             tr.className = 'border-b border-gray-700';
             const color = t.result === 'WIN' ? 'text-green-400' : 'text-red-400';
+
+            const esc = (str) => String(str).replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
             tr.innerHTML = `
-                <td class="px-4 py-2">${t.time}</td>
-                <td class="px-4 py-2">${t.type}</td>
+                <td class="px-4 py-2">${esc(t.time)}</td>
+                <td class="px-4 py-2">${esc(t.type)}</td>
                 <td class="px-4 py-2">${t.entry.toFixed(2)}</td>
                 <td class="px-4 py-2">${t.exit.toFixed(2)}</td>
-                <td class="px-4 py-2 font-bold ${color}">${t.result}</td>
+                <td class="px-4 py-2 font-bold ${color}">${esc(t.result)}</td>
                 <td class="px-4 py-2 ${color}">$${t.profit.toFixed(2)}</td>
             `;
             ui.backtest.logBody.appendChild(tr);
