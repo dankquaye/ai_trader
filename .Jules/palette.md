@@ -1,0 +1,3 @@
+## 2026-04-03 - Modal and Empty State Improvements
+**Learning:** Tables displaying dynamic data, such as the Trade History table, should implement a helpful empty state with an icon and message when no data is present, rather than leaving the table body empty. Interactive elements using `div` (like modal close buttons) must be migrated to semantic `<button type='button'>` elements with `aria-label` attributes to support keyboard accessibility and screen readers.
+**Action:** Always check dynamic tables for empty states and verify all interactive elements are semantic `<button>` tags with `aria-label`s for icons.
