@@ -183,14 +183,21 @@ async function runBacktest() {
             const tr = document.createElement('tr');
             tr.className = 'border-b border-gray-700';
             const color = t.result === 'WIN' ? 'text-green-400' : 'text-red-400';
-            tr.innerHTML = `
-                <td class="px-4 py-2">${t.time}</td>
-                <td class="px-4 py-2">${t.type}</td>
-                <td class="px-4 py-2">${t.entry.toFixed(2)}</td>
-                <td class="px-4 py-2">${t.exit.toFixed(2)}</td>
-                <td class="px-4 py-2 font-bold ${color}">${t.result}</td>
-                <td class="px-4 py-2 ${color}">$${t.profit.toFixed(2)}</td>
-            `;
+
+            const createTd = (content, extraClass = '') => {
+                const td = document.createElement('td');
+                td.className = `px-4 py-2 ${extraClass}`.trim();
+                td.textContent = content;
+                return td;
+            };
+
+            tr.appendChild(createTd(t.time));
+            tr.appendChild(createTd(t.type));
+            tr.appendChild(createTd(t.entry.toFixed(2)));
+            tr.appendChild(createTd(t.exit.toFixed(2)));
+            tr.appendChild(createTd(t.result, `font-bold ${color}`));
+            tr.appendChild(createTd(`$${t.profit.toFixed(2)}`, color));
+
             ui.backtest.logBody.appendChild(tr);
         });
 
@@ -637,9 +644,9 @@ function openModal(tradeId) {
         <div class="mb-4">
             <h5 class="font-bold text-gray-400 uppercase text-xs mb-1">Overview</h5>
             <div class="grid grid-cols-2 gap-2 bg-gray-900 p-2 rounded">
-                <div><span class="text-gray-500">Symbol:</span> ${trade.symbol}</div>
-                <div><span class="text-gray-500">Result:</span> <span class="${trade.profit > 0 ? 'text-green-400' : 'text-red-400'}">${trade.status} ($${trade.profit})</span></div>
-                <div><span class="text-gray-500">Grade:</span> ${trade.grade}</div>
+                <div><span class="text-gray-500">Symbol:</span> ${trade.symbol.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
+                <div><span class="text-gray-500">Result:</span> <span class="${trade.profit > 0 ? 'text-green-400' : 'text-red-400'}">${trade.status.replace(/</g, "&lt;").replace(/>/g, "&gt;")} ($${trade.profit})</span></div>
+                <div><span class="text-gray-500">Grade:</span> ${trade.grade ? trade.grade.replace(/</g, "&lt;").replace(/>/g, "&gt;") : '-'}</div>
                 <div><span class="text-gray-500">Confidence:</span> ${(r?.finalScore * 100).toFixed(1)}%</div>
             </div>
         </div>
@@ -666,18 +673,34 @@ function openModal(tradeId) {
 
     ui.modal.body.innerHTML = html;
     document.body.classList.add('modal-active');
-    ui.modal.el.classList.remove('opacity-0', 'pointer-events-none');
+    ui.modal.el.setAttribute('aria-hidden', 'false');
+    ui.modal.el.classList.remove('invisible', 'opacity-0', 'pointer-events-none');
 }
 
 function closeModal() {
     document.body.classList.remove('modal-active');
-    ui.modal.el.classList.add('opacity-0', 'pointer-events-none');
+    ui.modal.el.setAttribute('aria-hidden', 'true');
+    ui.modal.el.classList.add('invisible', 'opacity-0', 'pointer-events-none');
 }
 
 window.updateTradeHistory = (history, totalProfit, wins, losses) => {
     ui.botTotalProfit.innerText = `$${totalProfit.toFixed(2)}`;
     ui.botTotalProfit.className = totalProfit >= 0 ? 'font-bold text-green-400' : 'font-bold text-red-400';
     ui.historyTable.innerHTML = '';
+
+    if (!history || history.length === 0) {
+        const emptyTr = document.createElement('tr');
+        emptyTr.innerHTML = `
+            <td colspan="7" class="px-6 py-12 text-center text-gray-500">
+                <i class="fa-solid fa-folder-open text-4xl mb-3 text-gray-600 block"></i>
+                <p>No trades have been executed yet.</p>
+                <p class="text-xs mt-1">Start the bot to see your history.</p>
+            </td>
+        `;
+        ui.historyTable.appendChild(emptyTr);
+        return;
+    }
+
     const displayHistory = [...history].reverse().slice(0, 50);
 
     displayHistory.forEach((trade, index) => {
@@ -687,15 +710,34 @@ window.updateTradeHistory = (history, totalProfit, wins, losses) => {
         const color = trade.profit >= 0 ? 'text-green-400' : 'text-red-400';
         const gradeColor = trade.grade?.startsWith('A') ? 'text-green-400' : (trade.grade === 'F' ? 'text-red-500' : 'text-gray-400');
 
-        tr.innerHTML = `
-            <td class="px-6 py-4">${trade.time}</td>
-            <td class="px-6 py-4">${trade.symbol}</td>
-            <td class="px-6 py-4">${trade.type}</td>
-            <td class="px-6 py-4">$${trade.stake}</td>
-            <td class="px-6 py-4 font-bold ${color}">$${trade.profit.toFixed(2)}</td>
-            <td class="px-6 py-4 font-bold ${gradeColor}">${trade.grade || '-'}</td>
-            <td class="px-6 py-4"><button class="text-xs bg-blue-900 text-blue-300 px-2 py-1 rounded hover:bg-blue-800" onclick="event.stopPropagation(); openModal(${originalIndex})"><i class="fa-solid fa-magnifying-glass"></i> Details</button></td>
-        `;
+        const createTd = (content, extraClass = '') => {
+            const td = document.createElement('td');
+            td.className = `px-6 py-4 ${extraClass}`.trim();
+            td.textContent = content;
+            return td;
+        };
+
+        tr.appendChild(createTd(trade.time));
+        tr.appendChild(createTd(trade.symbol));
+        tr.appendChild(createTd(trade.type));
+        tr.appendChild(createTd(`$${trade.stake}`));
+        tr.appendChild(createTd(`$${trade.profit.toFixed(2)}`, `font-bold ${color}`));
+        tr.appendChild(createTd(trade.grade || '-', `font-bold ${gradeColor}`));
+
+        const btnTd = document.createElement('td');
+        btnTd.className = 'px-6 py-4';
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.setAttribute('aria-label', 'View trade details');
+        btn.className = 'text-xs bg-blue-900 text-blue-300 px-2 py-1 rounded hover:bg-blue-800';
+        btn.innerHTML = '<i class="fa-solid fa-magnifying-glass"></i> Details';
+        btn.onclick = (event) => {
+            event.stopPropagation();
+            openModal(originalIndex);
+        };
+        btnTd.appendChild(btn);
+        tr.appendChild(btnTd);
+
         tr.onclick = () => openModal(originalIndex);
         ui.historyTable.appendChild(tr);
     });
@@ -832,6 +874,153 @@ function showToast(message, type = 'info') {
             if (idx > -1) activeToasts.splice(idx, 1);
         }, 300);
     }, 3000);
+}
+
+function setupEventListeners() {
+    // Navigation
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            ui.navBtns.forEach(b => b.classList.remove('active', 'text-blue-400'));
+            btn.classList.add('active', 'text-blue-400');
+            const target = btn.dataset.target;
+            ui.pages.forEach(p => {
+                if (p.id === target) p.classList.remove('hidden');
+                else p.classList.add('hidden');
+            });
+            if (target === 'platform' && chart) chart.resize(ui.chartContainer.clientWidth, ui.chartContainer.clientHeight);
+            if (target === 'backtest' && btChart) btChart.resize(ui.backtest.chartContainer.clientWidth, ui.backtest.chartContainer.clientHeight);
+        });
+    });
+
+    // Account & Asset
+    ui.accountSelector.addEventListener('change', (e) => bot.setAccountType(e.target.value));
+    ui.assetSelector.addEventListener('change', (e) => bot.setSymbol(e.target.value));
+
+    // Bot Controls
+    ui.btns.startBot.addEventListener('click', () => {
+        if (!bot.currentSymbol) return showToast('Please select an asset first', 'error');
+        bot.start();
+        ui.btns.startBot.classList.add('hidden');
+        ui.btns.stopBot.classList.remove('hidden');
+        ui.btns.pauseBot.classList.remove('hidden');
+    });
+
+    ui.btns.stopBot.addEventListener('click', () => {
+        bot.stop();
+        ui.btns.stopBot.classList.add('hidden');
+        ui.btns.pauseBot.classList.add('hidden');
+        ui.btns.startBot.classList.remove('hidden');
+    });
+
+    ui.btns.pauseBot.addEventListener('click', () => {
+        const isPaused = bot.togglePause();
+        ui.btns.pauseBot.innerHTML = isPaused ? '<i class="fa-solid fa-play"></i>' : '<i class="fa-solid fa-pause"></i>';
+        ui.btns.pauseBot.setAttribute('aria-label', isPaused ? 'Resume Bot' : 'Pause Bot');
+        ui.btns.pauseBot.classList.toggle('bg-yellow-600', !isPaused);
+        ui.btns.pauseBot.classList.toggle('bg-green-600', isPaused);
+    });
+
+    ui.btns.killSwitch.addEventListener('click', () => {
+        bot.stop();
+        showToast('EMERGENCY STOP ACTIVATED', 'error');
+    });
+
+    // Strategy & Risk Settings
+    ui.botSettings.strategy.addEventListener('change', (e) => {
+        bot.updateConfig(e.target.value, ui.botSettings.risk.value);
+        renderStrategyParams(e.target.value);
+        saveSettings();
+    });
+
+    ui.botSettings.risk.addEventListener('change', (e) => {
+        bot.updateConfig(ui.botSettings.strategy.value, e.target.value);
+        saveSettings();
+    });
+
+    // Quick Presets
+    document.querySelectorAll('.btn-preset').forEach(btn => {
+        btn.addEventListener('click', () => applyPreset(btn.dataset.preset));
+    });
+
+    ui.btns.loadChallenge.addEventListener('click', () => {
+        bot.setSmallAccountMode(true);
+        applyPreset('conservative');
+    });
+
+    // Money Management
+    ['useMartingale', 'useSmartRisk', 'martingaleMultiplier', 'takeProfit', 'stopLoss'].forEach(id => {
+        if (ui.botSettings[id]) {
+            ui.botSettings[id].addEventListener('change', () => {
+                bot.setMoneyManagement(
+                    ui.botSettings.useMartingale.checked,
+                    parseFloat(ui.botSettings.martingaleMultiplier.value),
+                    parseFloat(ui.botSettings.takeProfit.value),
+                    parseFloat(ui.botSettings.stopLoss.value),
+                    ui.botSettings.useSmartRisk.checked
+                );
+                saveSettings();
+            });
+        }
+    });
+
+    // Filters
+    ['useFilter', 'adxThreshold', 'avoidSqueeze'].forEach(id => {
+        if (ui.botSettings[id]) {
+            ui.botSettings[id].addEventListener('change', () => {
+                bot.setFilter(
+                    ui.botSettings.useFilter.checked,
+                    parseInt(ui.botSettings.adxThreshold.value),
+                    ui.botSettings.avoidSqueeze.checked
+                );
+                saveSettings();
+            });
+        }
+    });
+
+    // AI Filter
+    if (ui.botSettings.useAIFilter) {
+        ui.botSettings.useAIFilter.addEventListener('change', (e) => {
+            bot.setAIFilter(e.target.checked);
+            saveSettings();
+        });
+    }
+
+    // Auto Select Asset
+    if (ui.botSettings.autoSelect) {
+        ui.botSettings.autoSelect.addEventListener('change', (e) => {
+            if (e.target.checked) startAutoScanner();
+            else stopAutoScanner();
+            saveSettings();
+        });
+    }
+
+    // Lock Params
+    if (ui.botSettings.lockParams) {
+        ui.botSettings.lockParams.addEventListener('change', (e) => {
+            bot.setParamLock(e.target.checked);
+            saveSettings();
+        });
+    }
+
+    // Inputs
+    ['duration', 'stake'].forEach(id => {
+        if (ui.inputs[id]) {
+            ui.inputs[id].addEventListener('change', () => {
+                bot.setDuration(parseInt(ui.inputs.duration.value));
+                bot.setStake(parseFloat(ui.inputs.stake.value));
+                saveSettings();
+            });
+        }
+    });
+
+    // Modal Closes
+    ui.modal.closes.forEach(el => el.addEventListener('click', closeModal));
+
+    // Export History
+    if (ui.btns.exportHistory) ui.btns.exportHistory.addEventListener('click', exportHistory);
+
+    // Backtest
+    if (ui.backtest.runBtn) ui.backtest.runBtn.addEventListener('click', runBacktest);
 }
 
 document.addEventListener('DOMContentLoaded', () => {
