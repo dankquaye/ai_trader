@@ -184,16 +184,20 @@ async function runBacktest() {
             tr.className = 'border-b border-gray-700';
             const color = t.result === 'WIN' ? 'text-green-400' : 'text-red-400';
 
-            const esc = (str) => String(str).replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            const createTd = (content, extraClass = '') => {
+                const td = document.createElement('td');
+                td.className = `px-4 py-2 ${extraClass}`.trim();
+                td.textContent = content;
+                return td;
+            };
 
-            tr.innerHTML = `
-                <td class="px-4 py-2">${esc(t.time)}</td>
-                <td class="px-4 py-2">${esc(t.type)}</td>
-                <td class="px-4 py-2">${t.entry.toFixed(2)}</td>
-                <td class="px-4 py-2">${t.exit.toFixed(2)}</td>
-                <td class="px-4 py-2 font-bold ${color}">${esc(t.result)}</td>
-                <td class="px-4 py-2 ${color}">$${t.profit.toFixed(2)}</td>
-            `;
+            tr.appendChild(createTd(t.time));
+            tr.appendChild(createTd(t.type));
+            tr.appendChild(createTd(t.entry.toFixed(2)));
+            tr.appendChild(createTd(t.exit.toFixed(2)));
+            tr.appendChild(createTd(t.result, `font-bold ${color}`));
+            tr.appendChild(createTd(`$${t.profit.toFixed(2)}`, color));
+
             ui.backtest.logBody.appendChild(tr);
         });
 
@@ -706,15 +710,34 @@ window.updateTradeHistory = (history, totalProfit, wins, losses) => {
         const color = trade.profit >= 0 ? 'text-green-400' : 'text-red-400';
         const gradeColor = trade.grade?.startsWith('A') ? 'text-green-400' : (trade.grade === 'F' ? 'text-red-500' : 'text-gray-400');
 
-        tr.innerHTML = `
-            <td class="px-6 py-4">${trade.time.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</td>
-            <td class="px-6 py-4">${trade.symbol.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</td>
-            <td class="px-6 py-4">${trade.type.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</td>
-            <td class="px-6 py-4">$${trade.stake}</td>
-            <td class="px-6 py-4 font-bold ${color}">$${trade.profit.toFixed(2)}</td>
-            <td class="px-6 py-4 font-bold ${gradeColor}">${trade.grade ? trade.grade.replace(/</g, "&lt;").replace(/>/g, "&gt;") : '-'}</td>
-            <td class="px-6 py-4"><button type="button" aria-label="View trade details" class="text-xs bg-blue-900 text-blue-300 px-2 py-1 rounded hover:bg-blue-800" onclick="event.stopPropagation(); openModal(${originalIndex})"><i class="fa-solid fa-magnifying-glass"></i> Details</button></td>
-        `;
+        const createTd = (content, extraClass = '') => {
+            const td = document.createElement('td');
+            td.className = `px-6 py-4 ${extraClass}`.trim();
+            td.textContent = content;
+            return td;
+        };
+
+        tr.appendChild(createTd(trade.time));
+        tr.appendChild(createTd(trade.symbol));
+        tr.appendChild(createTd(trade.type));
+        tr.appendChild(createTd(`$${trade.stake}`));
+        tr.appendChild(createTd(`$${trade.profit.toFixed(2)}`, `font-bold ${color}`));
+        tr.appendChild(createTd(trade.grade || '-', `font-bold ${gradeColor}`));
+
+        const btnTd = document.createElement('td');
+        btnTd.className = 'px-6 py-4';
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.setAttribute('aria-label', 'View trade details');
+        btn.className = 'text-xs bg-blue-900 text-blue-300 px-2 py-1 rounded hover:bg-blue-800';
+        btn.innerHTML = '<i class="fa-solid fa-magnifying-glass"></i> Details';
+        btn.onclick = (event) => {
+            event.stopPropagation();
+            openModal(originalIndex);
+        };
+        btnTd.appendChild(btn);
+        tr.appendChild(btnTd);
+
         tr.onclick = () => openModal(originalIndex);
         ui.historyTable.appendChild(tr);
     });
