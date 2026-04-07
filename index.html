@@ -349,7 +349,7 @@
                         <div class="flex gap-2 mb-2">
                              <button id="btn-start-bot" class="flex-1 bg-blue-600 hover:bg-blue-500 py-3 rounded font-bold shadow-lg">START</button>
                              <button id="btn-stop-bot" class="flex-1 bg-red-600 hover:bg-red-500 py-3 rounded font-bold hidden shadow-lg">STOP</button>
-                             <button id="btn-pause-bot" class="w-1/3 bg-yellow-600 hover:bg-yellow-500 py-3 rounded font-bold hidden shadow-lg text-sm"><i class="fa-solid fa-pause"></i></button>
+                             <button id="btn-pause-bot" class="w-1/3 bg-yellow-600 hover:bg-yellow-500 py-3 rounded font-bold hidden shadow-lg text-sm" aria-label="Pause Bot"><i class="fa-solid fa-pause" aria-hidden="true"></i></button>
                         </div>
 
                         <div class="mt-4 p-4 bg-gray-900 rounded h-40 overflow-y-auto font-mono text-xs" id="bot-logs">
@@ -521,16 +521,16 @@
     </div>
 
     <!-- Trade Reasoning Modal -->
-    <div id="reasoning-modal" class="modal opacity-0 pointer-events-none fixed w-full h-full top-0 left-0 flex items-center justify-center z-50">
+    <div id="reasoning-modal" class="modal invisible opacity-0 pointer-events-none fixed w-full h-full top-0 left-0 flex items-center justify-center z-50" role="dialog" aria-modal="true" aria-hidden="true">
         <div class="modal-overlay absolute w-full h-full bg-black opacity-75"></div>
         <div class="modal-container bg-gray-800 w-11/12 md:max-w-md mx-auto rounded shadow-lg z-50 overflow-y-auto max-h-[90vh]">
             <div class="modal-content py-4 text-left px-6">
                 <!-- Title -->
                 <div class="flex justify-between items-center pb-3 border-b border-gray-700">
                     <p class="text-2xl font-bold">Trade Analysis</p>
-                    <div class="modal-close cursor-pointer z-50">
-                        <i class="fa-solid fa-xmark text-xl"></i>
-                    </div>
+                    <button type="button" class="modal-close cursor-pointer z-50" aria-label="Close modal">
+                        <i class="fa-solid fa-xmark text-xl" aria-hidden="true"></i>
+                    </button>
                 </div>
 
                 <!-- Body -->
@@ -540,7 +540,7 @@
 
                 <!-- Footer -->
                 <div class="flex justify-end pt-2">
-                    <button class="modal-close px-4 py-2 bg-blue-600 rounded-lg text-white hover:bg-blue-500">Close</button>
+                    <button type="button" class="modal-close px-4 py-2 bg-blue-600 rounded-lg text-white hover:bg-blue-500" aria-label="Close modal">Close</button>
                 </div>
             </div>
         </div>
