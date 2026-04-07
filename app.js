@@ -666,12 +666,42 @@ function openModal(tradeId) {
 
     ui.modal.body.innerHTML = html;
     document.body.classList.add('modal-active');
-    ui.modal.el.classList.remove('opacity-0', 'pointer-events-none');
+    ui.modal.el.classList.remove('invisible', 'opacity-0', 'pointer-events-none');
+    ui.modal.el.setAttribute('aria-hidden', 'false');
 }
 
 function closeModal() {
     document.body.classList.remove('modal-active');
-    ui.modal.el.classList.add('opacity-0', 'pointer-events-none');
+    ui.modal.el.classList.add('invisible', 'opacity-0', 'pointer-events-none');
+    ui.modal.el.setAttribute('aria-hidden', 'true');
+}
+
+function setupEventListeners() {
+    ui.navBtns.forEach(btn => btn.addEventListener('click', () => {
+        ui.navBtns.forEach(b => b.classList.remove('active'));
+        ui.pages.forEach(p => p.classList.add('hidden'));
+        btn.classList.add('active');
+        document.getElementById(btn.dataset.target).classList.remove('hidden');
+    }));
+    ui.modal.closes.forEach(el => el.addEventListener('click', closeModal));
+    if(ui.accountSelector) ui.accountSelector.addEventListener('change', e => bot.setAccountType?.(e.target.value));
+    if(ui.btns.startBot) ui.btns.startBot.addEventListener('click', () => {
+        bot.start(); ui.btns.startBot.classList.add('hidden'); ui.btns.stopBot.classList.remove('hidden'); ui.btns.pauseBot.classList.remove('hidden');
+    });
+    if(ui.btns.stopBot) ui.btns.stopBot.addEventListener('click', () => {
+        bot.stop(); ui.btns.startBot.classList.remove('hidden'); ui.btns.stopBot.classList.add('hidden'); ui.btns.pauseBot.classList.add('hidden');
+    });
+    if(ui.btns.pauseBot) ui.btns.pauseBot.addEventListener('click', () => {
+        bot.isPaused = !bot.isPaused;
+        ui.btns.pauseBot.innerHTML = `<i class="fa-solid ${bot.isPaused ? 'fa-play' : 'fa-pause'}" aria-hidden="true"></i>`;
+        ui.btns.pauseBot.setAttribute('aria-label', bot.isPaused ? 'Resume Bot' : 'Pause Bot');
+    });
+    if(ui.btns.killSwitch) ui.btns.killSwitch.addEventListener('click', () => bot.emergencyStop?.());
+    document.querySelectorAll('.btn-preset').forEach(btn => btn.addEventListener('click', e => applyPreset(e.currentTarget.dataset.preset)));
+    if(ui.btns.exportHistory) ui.btns.exportHistory.addEventListener('click', exportHistory);
+    if(ui.botSettings.autoSelect) ui.botSettings.autoSelect.addEventListener('change', e => e.target.checked ? startAutoScanner() : stopAutoScanner());
+    [ui.botSettings.strategy, ui.botSettings.risk, ui.botSettings.useFilter, ui.botSettings.adxThreshold, ui.botSettings.avoidSqueeze, ui.botSettings.lockParams, ui.botSettings.useMartingale, ui.botSettings.useSmartRisk, ui.botSettings.martingaleMultiplier, ui.botSettings.takeProfit, ui.botSettings.stopLoss, ui.inputs.stake, ui.inputs.duration, ui.assetSelector].forEach(i => i?.addEventListener('change', saveSettings));
+    if(ui.backtest.runBtn) ui.backtest.runBtn.addEventListener('click', runBacktest);
 }
 
 window.updateTradeHistory = (history, totalProfit, wins, losses) => {

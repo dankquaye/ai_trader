@@ -1,0 +1,3 @@
+## 2025-04-07 - Dynamic ARIA and Visibility for Modals
+**Learning:** For modals styled with Tailwind, relying solely on opacity is insufficient for accessibility and interaction. Modals can block pointer events or be misread by screen readers if their `aria-hidden` and visibility classes aren't explicitly toggled.
+**Action:** When a modal is closed, apply `.invisible`, `.opacity-0`, `.pointer-events-none`, and `aria-hidden="true"`. When opened, remove `.invisible` and `.opacity-0`, and explicitly set `aria-hidden="false"`. Update all static `<div>` close buttons to `<button type="button">` with descriptive `aria-label`s.
