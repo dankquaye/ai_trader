@@ -678,6 +678,21 @@ window.updateTradeHistory = (history, totalProfit, wins, losses) => {
     ui.botTotalProfit.innerText = `$${totalProfit.toFixed(2)}`;
     ui.botTotalProfit.className = totalProfit >= 0 ? 'font-bold text-green-400' : 'font-bold text-red-400';
     ui.historyTable.innerHTML = '';
+
+    if (!history || history.length === 0) {
+        ui.historyTable.innerHTML = `
+            <tr>
+                <td colspan="7" class="px-6 py-8 text-center text-gray-500">
+                    <div class="flex flex-col items-center justify-center">
+                        <i class="fa-solid fa-folder-open text-3xl mb-2 text-gray-600"></i>
+                        <p>No trades have been executed yet.</p>
+                    </div>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
     const displayHistory = [...history].reverse().slice(0, 50);
 
     displayHistory.forEach((trade, index) => {
