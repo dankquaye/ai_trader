@@ -666,18 +666,36 @@ function openModal(tradeId) {
 
     ui.modal.body.innerHTML = html;
     document.body.classList.add('modal-active');
-    ui.modal.el.classList.remove('opacity-0', 'pointer-events-none');
+    ui.modal.el.setAttribute('aria-hidden', 'false');
+    ui.modal.el.style.display = 'flex';
+    ui.modal.el.classList.remove('opacity-0', 'pointer-events-none', 'invisible');
 }
 
 function closeModal() {
     document.body.classList.remove('modal-active');
-    ui.modal.el.classList.add('opacity-0', 'pointer-events-none');
+    ui.modal.el.setAttribute('aria-hidden', 'true');
+    ui.modal.el.style.display = 'none';
+    ui.modal.el.classList.add('opacity-0', 'pointer-events-none', 'invisible');
 }
 
 window.updateTradeHistory = (history, totalProfit, wins, losses) => {
     ui.botTotalProfit.innerText = `$${totalProfit.toFixed(2)}`;
     ui.botTotalProfit.className = totalProfit >= 0 ? 'font-bold text-green-400' : 'font-bold text-red-400';
     ui.historyTable.innerHTML = '';
+
+    if (!history || history.length === 0) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td colspan="7" class="px-6 py-8 text-center text-gray-500">
+                <i class="fa-solid fa-clock-rotate-left text-4xl mb-3 opacity-50 block"></i>
+                <p class="text-base font-bold text-gray-400">No trades yet</p>
+                <p class="text-sm mt-1">Start the bot or place a manual trade to see history here.</p>
+            </td>
+        `;
+        ui.historyTable.appendChild(tr);
+        return;
+    }
+
     const displayHistory = [...history].reverse().slice(0, 50);
 
     displayHistory.forEach((trade, index) => {
