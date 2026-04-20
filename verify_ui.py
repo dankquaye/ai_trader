@@ -7,7 +7,7 @@ def run(playwright):
     page = context.new_page()
 
     # Navigate to the local server
-    page.goto("http://localhost:8080/index.html")
+    page.goto("http://localhost:3000/index.html")
 
     # Wait for DOM
     page.wait_for_load_state("domcontentloaded")

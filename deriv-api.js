@@ -25,16 +25,14 @@ class DerivAPI {
         };
 
         // Credentials
-        // NOTE: Tokens should be provided by the user via UI or Environment Variables.
-        // Hardcoded tokens removed for security.
         this.credentials = {
             demo: {
                 appId: 71238,
-                token: '' // User must provide
+                token: localStorage.getItem('deriv_token_demo') || null
             },
             live: {
                 appId: 71236,
-                token: '' // User must provide
+                token: localStorage.getItem('deriv_token_live') || null
             }
         };
 
@@ -44,6 +42,7 @@ class DerivAPI {
     setToken(token) {
         if (this.credentials[this.accountType]) {
             this.credentials[this.accountType].token = token;
+            localStorage.setItem(`deriv_token_${this.accountType}`, token);
         }
     }
 
@@ -63,6 +62,12 @@ class DerivAPI {
         this.appId = creds.appId;
         this.token = creds.token;
 
+        // Try to load from config object if available (injected via console/script)
+        if (!this.token && window.DERIV_CONFIG && window.DERIV_CONFIG[this.accountType]) {
+            this.token = window.DERIV_CONFIG[this.accountType];
+            console.log('Loaded token from external config.');
+        }
+
         if (!this.token) {
             console.warn('Cannot connect: Missing API Token');
             return;
@@ -77,6 +82,10 @@ class DerivAPI {
             console.log('WebSocket Connected');
             this.isConnected = true;
             this.authorize();
+            // Reset bot state on reconnect to avoid stuck locks
+            if (window.bot && typeof window.bot.resetState === 'function') {
+                window.bot.resetState();
+            }
         };
 
         this.ws.onmessage = (msg) => {
@@ -170,12 +179,16 @@ class DerivAPI {
     }
 
     subscribeTicks(symbol) {
+        if (this.activeSubscriptions.ticks === symbol) return;
         this.send({ ticks: symbol, subscribe: 1 });
         this.activeSymbol = symbol;
         this.activeSubscriptions.ticks = symbol;
     }
 
     subscribeCandles(symbol, granularity) {
+        const s = this.activeSubscriptions.candles;
+        if (s && s.symbol === symbol && s.granularity === granularity) return;
+
         this.send({ ticks_history: symbol, end: 'latest', count: 100, style: 'candles', granularity: granularity, subscribe: 1 });
         this.activeSubscriptions.candles = { symbol, granularity };
     }

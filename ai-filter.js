@@ -42,6 +42,11 @@ class AIFilter {
             return;
         }
 
+        if (this.models.length > 0 && this.regimeModel) {
+            this.log('AI Models already initialized. Skipping re-initialization.');
+            return;
+        }
+
         try {
             // Use WebGL for performance if available, else CPU
             await tf.setBackend('webgl').catch(() => tf.setBackend('cpu'));

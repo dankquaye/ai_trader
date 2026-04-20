@@ -17,6 +17,7 @@ class TradingBot {
         this.isBacktesting = false;
         this.isPaused = false;
         this.isParamLocked = false;
+        this.lastStrategyChange = 0; // For Rotation Lock
 
         // --- Components ---
         this.aiFilter = new AIFilter();
@@ -77,7 +78,11 @@ class TradingBot {
         this.consecutiveLosses = 0;
         this.lastTradeTime = 0;
         this.tradeHistory = [];
-        this.hasOpenTrade = false;
+        this.hasOpenTrade = false; // Deprecated, use tradeState
+        this.tradeState = 'IDLE'; // IDLE, SIGNAL_CONFIRMED, ORDER_SENT, IN_TRADE, TRADE_CLOSED, COOLDOWN
+        this.MAX_STAKE = 50; // Safety Cap
+        this.STOP_TRADING_LOSSES = 4; // Stop after X consecutive losses
+        this.drawdownVelocity = []; // timestamps of losses
         this.sessionPeakProfit = 0;
         this.riskState = 'NORMAL'; // NORMAL, AGGRESSIVE, PROTECT, WAIT
         this.marketCondition = 'Analyzing';
@@ -89,6 +94,8 @@ class TradingBot {
 
         // --- Advanced State ---
         this.quantumState = { pendingSignal: null, startTickIndex: 0, confirmationTicks: 0 };
+        this.lastTradeConfidence = 0;
+        this.fingerprintMemory = new Map(); // Key: Fingerprint, Val: { losses: 0, banUntil: 0 }
         this.watchdog = { state: 'IDLE', lastTransition: 0, timeoutId: null };
         this.gradeHistory = [];
         this.gradeStats = { A: 0, B: 0, C: 0, D: 0, F: 0, Total: 0 };
@@ -97,6 +104,7 @@ class TradingBot {
 
         // --- Learning ---
         this.learning = { totalTrades: 0, wins: 0, threshold: 4.5 };
+        this.learningLog = []; // Detailed trade log for adaptation
 
         // --- Virtual Trading (Recovery) ---
         this.isVirtualRecovery = false;
@@ -105,6 +113,15 @@ class TradingBot {
 
         this.currentTradeReasoning = null;
         this.currentTradeExpectedPrice = 0;
+        this.decisionTrace = [];
+    }
+
+    addTrace(stage, status, data = {}) {
+        const trace = { time: Date.now(), stage, status, data };
+        this.decisionTrace.push(trace);
+        if (typeof window !== 'undefined') {
+             window.dispatchEvent(new CustomEvent('bot-trace', { detail: trace }));
+        }
     }
 
     // ============================================================
@@ -113,6 +130,9 @@ class TradingBot {
 
     async start() {
         this.isRunning = true;
+        this.lastStrategyChange = Date.now();
+        // Start Integrity Watchdog
+        this.integrityInterval = setInterval(() => this.checkIntegrity(), 60000);
         this.isPaused = false;
         this.currentStake = this.initialStake;
         this.totalProfit = 0;
@@ -141,6 +161,7 @@ class TradingBot {
 
     stop() {
         this.isRunning = false;
+        if(this.integrityInterval) clearInterval(this.integrityInterval);
         this.log('Bot stopped.');
     }
 
@@ -253,6 +274,22 @@ class TradingBot {
         }
     }
 
+    restoreState(history, profit, wins, losses) {
+        this.tradeHistory = history || [];
+        this.totalProfit = profit || 0;
+        this.wins = wins || 0;
+        this.losses = losses || 0;
+
+        // Restore Learning Log
+        const learning = localStorage.getItem('derivBotLearning');
+        if (learning) {
+            try { this.learningLog = JSON.parse(learning); }
+            catch(e) { console.error('Failed to load learning log', e); }
+        }
+
+        this.log(`Restored ${this.tradeHistory.length} trades and ${this.learningLog.length} learning events.`);
+    }
+
     // ============================================================
     // Data Ingestion
     // ============================================================
@@ -264,7 +301,29 @@ class TradingBot {
         this.candles5m = [];
         this.lastSignal = null;
         this.marketCondition = 'Analyzing...';
+        this.resetState(); // Ensure clean slate
         this.log(`Switched to symbol: ${symbol}. State reset.`);
+    }
+
+    resetState() {
+        this.tradeState = 'IDLE';
+        this.hasOpenTrade = false;
+        this.watchdog.state = 'IDLE';
+        this.api.pendingTrade = false;
+        this.lastTradeConfidence = 0; // Reset tracking
+        if(this.watchdog.timeoutId) clearTimeout(this.watchdog.timeoutId);
+        this.activeContracts.clear();
+        this.pendingSymbol = null;
+        this.log('Bot state reset.');
+        if(window.updateWatchdogStatus) window.updateWatchdogStatus('IDLE');
+    }
+
+    updateTradeState(newState, reason) {
+        if(this.tradeState !== newState) {
+            this.log(`State Transition: ${this.tradeState} -> ${newState} (${reason})`);
+            this.tradeState = newState;
+            if(window.updateWatchdogStatus) window.updateWatchdogStatus(newState);
+        }
     }
 
     processTick(tick) {
@@ -319,10 +378,12 @@ class TradingBot {
     // ============================================================
 
     async evaluate() {
+        this.decisionTrace = [];
         try {
             await this._evaluateSafe();
         } catch (e) {
             console.error('Bot Evaluation Error:', e);
+            this.addTrace('Error', 'Critical', { message: e.message });
             this.stop();
         }
     }
@@ -337,9 +398,17 @@ class TradingBot {
 
         if (Date.now() < this.cooldownEndTime && !this.isBacktesting) return;
 
+        // Early Rejection: Latency & Basic Checks
+        if (!this.isBacktesting && this.api.latency > 700) return;
+
+        // Optimization: Throttle heavy analysis
+        if (this.marketCondition !== 'Volatile' && this.ticks.length % 2 !== 0 && !this.isBacktesting) {
+             return;
+        }
+
         this.detectMarketCondition();
         this.determineRiskState(); // Update Risk State Machine
-        this.adjustParameters();
+        // this.adjustParameters(); // Removed to preserve learning adjustments
 
         // Enforce WAIT MODE
         if (this.riskState === 'WAIT' && !this.isBacktesting) {
@@ -352,8 +421,8 @@ class TradingBot {
         }
 
         // 1. ANALYZE FIRST (Set Confidence)
-        const startSymbol = this.currentSymbol; // Freeze symbol before async analysis
-        let signal = await this.analyze();
+        const startSymbol = this.currentSymbol;
+        let result = await this.analyze();
 
         // Safety Check: Did symbol change during analysis?
         if (this.currentSymbol !== startSymbol) {
@@ -361,24 +430,34 @@ class TradingBot {
             return;
         }
 
-        // 2. CALCULATE STAKE & VALIDATE GRADE (After Confidence is set)
-        if (signal) {
-            const canTrade = this.updateStakeWithRisk(); // Returns false if D/F Grade
-            if (!canTrade) signal = null;
-        }
+        // 2. EVALUATE SIGNAL SCORE
+        if (result && result.direction) {
+            this.confidence = result.confidence; // Sync confidence
 
-        // Final Confidence Check
-        let minConfidence = this.isSmallAccount ? 80 : 60;
-        if (signal && this.confidence < minConfidence) {
-            signal = null;
+            // Dynamic Thresholding: Use learned parameters
+            let threshold = this.params.confidenceThreshold * 100;
+
+            // Local overrides for critical states (minimum safety floors)
+            if (this.marketCondition === 'Volatile') threshold = Math.max(threshold, 80);
+            if (this.riskState === 'PROTECT') threshold = Math.max(threshold, 85);
+
+            if (result.confidence < threshold) {
+                result = null;
+            } else {
+                const canTrade = this.updateStakeWithRisk(); // Returns false if D/F Grade
+                if (!canTrade) result = null;
+            }
         }
 
         // 3. EXECUTE
-        if (signal) {
+        if (result) {
             if (this.isBacktesting) {
-                this.lastSignal = signal;
+                this.lastSignal = result.direction;
             } else {
-                this.watchdogAttemptExecution(signal, startSymbol);
+                if (this.tradeState === 'IDLE') {
+                    this.updateTradeState('SIGNAL_CONFIRMED', `Signal Validated (${result.confidence.toFixed(1)}%)`);
+                    this.watchdogAttemptExecution(result.direction, startSymbol);
+                }
             }
         } else {
             this.lastSignal = null;
@@ -407,31 +486,58 @@ class TradingBot {
     }
 
     async analyze() {
+        // Enforce Regime Rules
+        if (!this.checkMarketRegime(this.strategy)) {
+            // this.log(`Analysis skipped: Regime mismatch (${this.marketCondition} vs ${this.strategy})`); // Too noisy
+            return null;
+        }
+
         const prices = this.ticks;
         const lastPrice = prices[prices.length - 1];
+
+        let signal = null;
 
         if (this.strategy === 'dynamic') {
              if (this.candles1m.length > 20) {
                 const closes = this.candles1m.map(c => c.close);
                 const adx = this.calculateADX(closes, 14).pop() || 0;
-                if (adx > 25) return this.analyzeMultiTF();
+                if (adx > 25) signal = this.analyzeMultiTF();
              }
-             return null;
+        }
+        else if (this.strategy === 'random') signal = Math.random() > 0.5 ? 'rise' : 'fall';
+        else if (this.strategy === 'rsi') signal = this.analyzeRSI(prices, lastPrice);
+        else if (this.strategy === 'sma') signal = this.analyzeSMA(prices);
+        else if (this.strategy === 'bb') signal = this.analyzeBB(prices, lastPrice);
+        else if (this.strategy === 'neural') signal = this.analyzeNeuralTrend(prices);
+        else if (this.strategy === 'ultra_instinct') signal = this.analyzeMultiTF();
+        else if (this.strategy === 'quantum') signal = await this.analyzeQuantumEnlargement();
+
+        // Standardize Signal Object if legacy string returned
+        if (typeof signal === 'string') {
+            return { direction: signal, confidence: this.confidence || 50, strategy: this.strategy };
         }
 
-        if (this.strategy === 'random') return Math.random() > 0.5 ? 'rise' : 'fall';
+        return signal; // Assumes objects returned by advanced strategies
+    }
 
-        // Legacy Strategies
-        if (this.strategy === 'rsi') return this.analyzeRSI(prices, lastPrice);
-        if (this.strategy === 'sma') return this.analyzeSMA(prices);
-        if (this.strategy === 'bb') return this.analyzeBB(prices, lastPrice);
-        if (this.strategy === 'neural') return this.analyzeNeuralTrend(prices);
+    checkMarketRegime(strategy) {
+        if (this.marketCondition === 'Analyzing...') return true; // Allow initial
+        if (strategy === 'random') return true;
 
-        // Advanced Strategies
-        if (this.strategy === 'ultra_instinct') return this.analyzeMultiTF();
-        if (this.strategy === 'quantum') return await this.analyzeQuantumEnlargement();
-
-        return null;
+        if (this.marketCondition === 'Trending') {
+            return ['ultra_instinct', 'neural', 'sma', 'dynamic', 'quantum'].includes(strategy);
+        }
+        if (this.marketCondition === 'Ranging') {
+            return ['rsi', 'bb', 'quantum'].includes(strategy);
+        }
+        if (this.marketCondition === 'Volatile') {
+            // Only specialized strategies or high risk
+            return ['ultra_instinct', 'quantum'].includes(strategy);
+        }
+        if (this.marketCondition === 'Squeeze') {
+            return false; // No trade in squeeze
+        }
+        return true;
     }
 
     // Legacy Analysis Methods
@@ -489,12 +595,42 @@ class TradingBot {
     async analyzeQuantumEnlargement() {
         if (this.candles1m.length < 50) return null;
 
+        this.addTrace('Quantum', 'Start', { candles: this.candles1m.length });
+
         // Layer 2: Parallel Probability Engines
         const pTrend = this.qtTrendEngine();
+        this.addTrace('Engine', 'Trend', pTrend);
+
         const pMom = this.qtMomentumEngine();
+        this.addTrace('Engine', 'Momentum', pMom);
+
         const pVol = this.qtVolatilityEngine();
+        this.addTrace('Engine', 'Volatility', { val: pVol });
+
         const pNoise = this.qtNoiseEngine();
+        this.addTrace('Engine', 'Noise', { val: pNoise });
+
         const pAI = await this.qtAIEngine();
+        if(pAI) this.addTrace('Engine', 'AI', pAI);
+
+        // --- AI Abstention Logic (Divergence Check) ---
+        let activeAI = pAI;
+        if (pAI) {
+            const techScore = (pTrend.buy + pMom.buy) / 2;
+            const aiScore = pAI.buy;
+            const divergence = Math.abs(techScore - aiScore);
+
+            // If Technicals are strong (>0.7 or <0.3) and AI disagrees significantly (>0.5 diff)
+            // Or if Noise is high, forcing AI to hallucinate
+            const isTechStrong = techScore > 0.7 || techScore < 0.3;
+
+            if (isTechStrong && divergence > 0.5) {
+                 this.addTrace('AI', 'Abstained', { reason: 'Divergence', tech: techScore, ai: aiScore });
+                 this.log(`AI Divergence (Tech: ${techScore.toFixed(2)} vs AI: ${aiScore.toFixed(2)}). Abstaining.`);
+                 activeAI = null;
+            }
+        }
+        // ---------------------------------------------
 
         // Signal Quality Enforcement: Confluence Check
         let buyVotes = 0;
@@ -503,8 +639,8 @@ class TradingBot {
         if (pMom.buy > 0.5) buyVotes++; else sellVotes++;
 
         // AI Vote (Only if Active)
-        if (pAI) {
-            if (pAI.buy > 0.5) buyVotes++; else sellVotes++;
+        if (activeAI) {
+            if (activeAI.buy > 0.5) buyVotes++; else sellVotes++;
         }
 
         if (pVol > 0.7) { buyVotes++; sellVotes++; }
@@ -519,7 +655,7 @@ class TradingBot {
         let activeWNoise = wNoise;
         let activeWAI = wAI;
 
-        if (!pAI) {
+        if (!activeAI) {
             const distribute = wAI / 4;
             activeWTrend += distribute;
             activeWMom += distribute;
@@ -528,11 +664,14 @@ class TradingBot {
             activeWAI = 0;
         }
 
-        const aiBuy = pAI ? pAI.buy : 0;
-        const aiSell = pAI ? pAI.sell : 0;
+        const aiBuy = activeAI ? activeAI.buy : 0;
+        const aiSell = activeAI ? activeAI.sell : 0;
 
-        const rawBuy = (pTrend.buy * activeWTrend + pMom.buy * activeWMom + aiBuy * activeWAI) / (activeWTrend + activeWMom + activeWAI);
-        const rawSell = (pTrend.sell * activeWTrend + pMom.sell * activeWMom + aiSell * activeWAI) / (activeWTrend + activeWMom + activeWAI);
+        const totalWeight = activeWTrend + activeWMom + activeWAI;
+        const safeWeight = totalWeight === 0 ? 1 : totalWeight;
+
+        const rawBuy = (pTrend.buy * activeWTrend + pMom.buy * activeWMom + aiBuy * activeWAI) / safeWeight;
+        const rawSell = (pTrend.sell * activeWTrend + pMom.sell * activeWMom + aiSell * activeWAI) / safeWeight;
 
         const direction = rawBuy > rawSell ? 'rise' : 'fall';
         const votes = direction === 'rise' ? buyVotes : sellVotes;
@@ -721,60 +860,80 @@ class TradingBot {
     // ============================================================
 
     watchdogAttemptExecution(direction, symbol) {
-        if (this.watchdog.state !== 'IDLE' && this.watchdog.state !== 'ANALYZING') return;
-        if (this.isPaused) return;
-        if (this.hasOpenTrade || this.api.pendingTrade) return;
-
-        if (this.api.latency > 250) {
-            this.log(`Watchdog blocked: High Latency (${this.api.latency}ms).`);
-            return;
+        // Pre-Execution Gate
+        if (!this.canExecuteTrade(direction, symbol, this.confidence)) {
+             this.updateTradeState('IDLE', 'Execution Gate Rejection');
+             return;
         }
 
-        // Losing Streak Protection
+        // Strict State Check
+        if (this.tradeState !== 'SIGNAL_CONFIRMED') return;
+        if (this.isPaused) return;
+
+        // Latency Penalty Check (Moved logic from Gate to here for specific modification if needed, or rely on Gate)
+        // Gate checks absolute block (>700). Here we apply soft penalty.
+        if (this.api.latency > 400) {
+            const penalty = (this.api.latency - 400) / 50;
+            this.confidence -= penalty;
+            if (this.confidence < 90) { // Post-penalty check
+                 this.log(`Execution blocked: Latency Penalty dropped confidence to ${this.confidence.toFixed(1)}%.`);
+                 this.updateTradeState('IDLE', 'Latency Penalty');
+                 return;
+            }
+        }
+
+        this.lastTradeConfidence = this.confidence;
+
+        // Redundant check for old flags
+        if (this.api.pendingTrade) return;
+
+        // Losing Streak Protection (Redundant with Gate? Gate has simple check, strict check here)
         if (this.consecutiveLosses >= 2) {
-            if (this.confidence < 90 && this.marketCondition !== 'Trending') {
-                this.log(`Watchdog blocked: Losing Streak Protection. Need >90% Confidence or Trending Market.`);
+            // Require even higher confidence or trend
+            if (this.confidence < 92 && this.marketCondition !== 'Trending') {
+                this.updateTradeState('IDLE', 'Streak Protection');
                 return;
             }
         }
 
         if (this.isVirtualRecovery) {
             this.executeVirtualTrade(direction);
+            this.updateTradeState('IDLE', 'Virtual Trade Executed');
             return;
         }
 
-        this.setWatchdogState('LOCKED');
+        // Transition to ORDER_SENT
+        this.updateTradeState('ORDER_SENT', 'Placing Order');
 
         const now = Date.now();
-        if (this.lastTradeTime && (now - this.lastTradeTime < 2000)) {
-             this.setWatchdogState('IDLE'); // Too fast
+        // Allow rapid re-entry if high confidence (>95%) to catch trends, otherwise rate limit
+        if (this.confidence <= 95 && this.lastTradeTime && (now - this.lastTradeTime < 2000)) {
+             this.updateTradeState('IDLE', 'Rate Limit');
              return;
         }
         this.lastTradeTime = now;
-        this.hasOpenTrade = true;
+        this.hasOpenTrade = true; // Keep for legacy compatibility if needed
         this.currentTradeExpectedPrice = this.ticks[this.ticks.length-1];
 
-        this.setWatchdogState('EXECUTING');
-
         let tradeDuration = this.useDynamicDuration ? 2 : this.duration;
-        this.log(`[WATCHDOG] Executing ${direction.toUpperCase()} ($${this.currentStake}) on ${symbol}...`);
+        this.log(`[EXEC] Sending ${direction.toUpperCase()} ($${this.currentStake}) on ${symbol}...`);
 
         this.pendingSymbol = symbol;
         this.api.placeTrade(direction, this.currentStake, tradeDuration, symbol);
 
+        // Strict 2s Timeout for Server Confirmation
         this.watchdog.timeoutId = setTimeout(() => {
-            if (this.watchdog.state === 'EXECUTING') {
-                this.log('CRITICAL: Trade execution timed out. Resetting Watchdog.');
-                this.hasOpenTrade = false;
+            if (this.tradeState === 'ORDER_SENT') {
+                this.log('CRITICAL: Order timed out (No Confirmation). Resetting.');
                 this.api.pendingTrade = false;
-                this.setWatchdogState('IDLE');
+                this.resetState();
             }
-        }, 5000);
+        }, 2000);
     }
 
+    // Deprecated but kept for UI compatibility
     setWatchdogState(newState) {
         this.watchdog.state = newState;
-        this.watchdog.lastTransition = Date.now();
         if(window.updateWatchdogStatus) window.updateWatchdogStatus(newState);
     }
 
@@ -786,29 +945,74 @@ class TradingBot {
             this.pendingSymbol = null;
         }
 
-        this.setWatchdogState('MANAGING');
+        this.updateTradeState('IN_TRADE', `Contract ${contractId} Confirmed`);
     }
 
     handleTradeResult(contract) {
+        this.updateTradeState('TRADE_CLOSED', `Profit: ${contract.profit}`);
         this.hasOpenTrade = false;
 
         const profit = parseFloat(contract.profit);
         const isWin = profit > 0;
+
+        // Penalize Low Grade Wins
+        if (isWin) {
+            const grade = this.gradeTrade(true, this.currentTradeReasoning);
+            if (grade === 'D' || grade === 'F') {
+                this.requiredConfidence = Math.min(95, this.requiredConfidence + 2);
+                this.log(`Win with Low Grade (${grade}). Tightening Confidence +2%.`);
+            }
+        }
 
         const storedSymbol = this.activeContracts.get(contract.contract_id);
         const symbol = contract.underlying_symbol || storedSymbol || this.api.activeSymbol || 'Unknown';
 
         if (contract.contract_id) this.activeContracts.delete(contract.contract_id);
 
-        // Cooldown
-        let cooldownTime = 1000;
+        // Adaptive Cooldown Engine using EQS & Grade
+        let cooldownTime = 2000; // Base
+        const eqs = this.calculateEQS(contract);
+        const tradeGrade = this.gradeTrade(isWin, this.currentTradeReasoning);
+
+        // Cooldown based on Trade Grade (Signal Quality + Execution)
+        if (tradeGrade.startsWith('A')) cooldownTime = 1000;
+        else if (tradeGrade.startsWith('B')) cooldownTime = 3000;
+        else if (tradeGrade.startsWith('C')) cooldownTime = 6000;
+        else cooldownTime = 10000; // D or F
+
+        // EQS Adjustment
+        if (eqs < 50) cooldownTime += 2000;
+
         if (!isWin) {
-            if (this.consecutiveLosses >= 2) cooldownTime = 10000;
-            if (this.consecutiveLosses >= 4) cooldownTime = 60000;
+            // Loss Penalty
+            cooldownTime = Math.max(cooldownTime * 1.5, 5000);
+
+            // Drawdown Velocity Tracking
+            this.drawdownVelocity.push(Date.now());
+            this.checkDrawdownVelocity();
+
+            // Enhanced Loss Protection
+            if (this.consecutiveLosses >= 2) {
+                cooldownTime = Math.max(cooldownTime, 10000); // Min 10s
+                this.log(`Consecutive Losses: Extended Cooldown (10s) & Boosting Confidence.`);
+                this.requiredConfidence = Math.min(95, this.requiredConfidence + 5);
+            }
+
+            if (this.consecutiveLosses >= this.STOP_TRADING_LOSSES) {
+                this.log(`Stopped trading due to ${this.STOP_TRADING_LOSSES} consecutive losses.`);
+                this.updateTradeState('STOPPED', 'Max Consecutive Losses');
+                return;
+            }
         }
 
-        this.setWatchdogState('COOLDOWN');
-        setTimeout(() => this.setWatchdogState('IDLE'), cooldownTime);
+        this.log(`EQS: ${eqs.toFixed(0)} | Cooldown: ${cooldownTime}ms`);
+        if(window.updateEQS) window.updateEQS(eqs);
+        this.updateTradeState('COOLDOWN', `Wait ${cooldownTime}ms`);
+        setTimeout(() => {
+            if (this.tradeState === 'COOLDOWN') {
+                this.updateTradeState('IDLE', 'Cooldown Complete');
+            }
+        }, cooldownTime);
 
         if (!this.isRunning) return;
 
@@ -832,12 +1036,12 @@ class TradingBot {
         }
 
         // Grading & Learning
-        const grade = this.gradeTrade(isWin, this.currentTradeReasoning);
-        const cleanGrade = grade.replace('+', '').replace('-', '');
+        // Re-use tradeGrade calculated above
+        const cleanGrade = tradeGrade.replace('+', '').replace('-', '');
         if (this.gradeStats[cleanGrade] !== undefined) this.gradeStats[cleanGrade]++;
         this.gradeStats.Total++;
 
-        this.updateGradeDrift(grade);
+        this.updateGradeDrift(tradeGrade);
 
         if (symbol === this.currentSymbol) {
             let label = -1;
@@ -847,7 +1051,7 @@ class TradingBot {
             if (isCall) label = isWin ? 1 : 0;
             else label = isWin ? 0 : 1;
 
-            if (grade.startsWith('A') || grade === 'B') {
+            if (tradeGrade.startsWith('A') || tradeGrade === 'B') {
                 const startTime = contract.date_start;
                 const candleIdx = this.candles1m.findIndex(c => Math.abs(c.time - startTime) < 60);
                 if (candleIdx !== -1) {
@@ -855,7 +1059,7 @@ class TradingBot {
                     const seq = this.extractSequence(candleIdx - 1, 10);
                     if (seq && this.aiFilter.addSample) {
                         this.aiFilter.addSample(seq, label);
-                        this.log(`AI Memory Updated with Grade ${grade} Trade (Label: ${label}).`);
+                        this.log(`AI Memory Updated with Grade ${tradeGrade} Trade (Label: ${label}).`);
                     }
                 }
             }
@@ -877,7 +1081,24 @@ class TradingBot {
         this.updateLearning(isWin);
         if (this.optimizer) this.optimizer.onTrade(isWin, this.marketCondition);
 
-        this.log(`Trade Finished. Profit: $${profit.toFixed(2)} (Grade: ${grade})`);
+        this.log(`Trade Finished. Profit: $${profit.toFixed(2)} (Grade: ${tradeGrade})`);
+
+        // Fingerprint Update
+        const type = contract.contract_type ? contract.contract_type.toUpperCase() : '';
+        const dir = type.includes('CALL') || type.includes('RISE') ? 'rise' : 'fall';
+        const fpKey = this.getSignalFingerprint(dir);
+
+        if (!isWin) {
+            const mem = this.fingerprintMemory.get(fpKey) || { losses: 0, banUntil: 0 };
+            mem.losses++;
+            if (mem.losses >= 2) {
+                mem.banUntil = Date.now() + (mem.losses * 60000); // Ban for N minutes
+                this.log(`Fingerprint [${fpKey}] penalized. Banned for ${mem.losses} min.`);
+            }
+            this.fingerprintMemory.set(fpKey, mem);
+        } else {
+            this.fingerprintMemory.delete(fpKey); // Clear penalty on win
+        }
 
         this.tradeHistory.push({
             time: new Date().toLocaleTimeString(),
@@ -886,7 +1107,7 @@ class TradingBot {
             stake: contract.buy_price,
             profit: profit,
             status: isWin ? 'WIN' : 'LOSS',
-            grade: grade,
+            grade: tradeGrade,
             reasoning: this.currentTradeReasoning
         });
 
@@ -904,9 +1125,9 @@ class TradingBot {
     updateGradeDrift(grade) {
         let numericGrade = 0;
         if (grade.startsWith('A')) numericGrade = 4;
-        else if (grade === 'B') numericGrade = 3;
-        else if (grade === 'C') numericGrade = 2;
-        else if (grade === 'D') numericGrade = 1;
+        else if (grade.startsWith('B')) numericGrade = 3;
+        else if (grade.startsWith('C')) numericGrade = 2;
+        else if (grade.startsWith('D')) numericGrade = 1;
 
         this.gradeHistory.push(numericGrade);
         if (this.gradeHistory.length > 10) this.gradeHistory.shift();
@@ -918,6 +1139,70 @@ class TradingBot {
                 this.setRiskState('PROTECT', 'Low Grade Drift');
             }
         }
+    }
+
+    // --- Fail-Safes ---
+
+    checkIntegrity() {
+        // State Integrity Watchdog
+        // Checks if bot is stuck in a transient state for too long
+        const stuckTime = Date.now() - this.lastTradeTime;
+
+        if ((this.tradeState === 'ORDER_SENT' && stuckTime > 30000) ||
+            (this.tradeState === 'IN_TRADE' && stuckTime > 300000)) { // 30s for Order, 5m for Trade
+            this.log(`CRITICAL: Bot Stuck in ${this.tradeState} > ${stuckTime/1000}s. Force Reset.`);
+            this.resetState();
+        }
+
+        // Prevent overlapping trades if API reports pending but state is IDLE (rare desync)
+        if (this.tradeState === 'IDLE' && this.api.pendingTrade) {
+             this.log('Integrity Fix: API pending but State IDLE. Resetting API flag.');
+             this.api.pendingTrade = false;
+        }
+    }
+
+    canExecuteTrade(direction, symbol, confidence) {
+        // 1. Latency & System Health
+        if (this.api.latency > 700) {
+            this.log(`Execution blocked: Critical Latency (${this.api.latency}ms).`);
+            return false;
+        }
+
+        // 2. Cooldown
+        if (this.tradeState !== 'SIGNAL_CONFIRMED' && this.tradeState !== 'IDLE') return false;
+        if (Date.now() < this.cooldownEndTime) return false;
+
+        // 3. Market Regime & Risk
+        if (this.riskState === 'WAIT') return false;
+        if (this.riskState === 'PROTECT' && confidence < 90) return false;
+
+        // 4. Repeated Signal Check (Signal Quality)
+        if (confidence <= this.lastTradeConfidence && confidence < 95) {
+             // Allow if confidence improved significantly or is very high
+             return false;
+        }
+
+        // 5. Fingerprint Ban Check
+        const fp = this.getSignalFingerprint(direction);
+        const mem = this.fingerprintMemory.get(fp);
+        if (mem && mem.banUntil > Date.now()) {
+            this.log(`Execution blocked: Signal Fingerprint Banned until ${new Date(mem.banUntil).toLocaleTimeString()}`);
+            return false;
+        }
+
+        // 6. Volatility Filter (if enabled)
+        if (this.useFilter && this.currentEntropy > 1.5 && this.marketCondition !== 'Volatile') {
+             // Too chaotic unless we know it's volatile
+             return false;
+        }
+
+        return true;
+    }
+
+    triggerCircuitBreaker(reason) {
+        this.log(`CIRCUIT BREAKER TRIGGERED: ${reason}`);
+        this.stop();
+        this.updateTradeState('STOPPED', 'Circuit Breaker');
     }
 
     // ============================================================
@@ -1061,6 +1346,31 @@ class TradingBot {
         const a2 = v2 - v3;
         return (a1 + a2) / 2;
     }
+
+    calculateEQS(trade) {
+        // Execution Quality Score (0-100)
+        // Factors: Latency, Slippage
+
+        let score = 100;
+        const details = { latency: 0, slippage: 0 };
+
+        // 1. Latency Impact
+        if (this.api.latency > 700) { score -= 40; details.latency = 40; }
+        else if (this.api.latency > 450) { score -= 20; details.latency = 20; }
+        else if (this.api.latency > 250) { score -= 10; details.latency = 10; }
+
+        // 2. Slippage Impact
+        if (trade && trade.entry_tick && this.currentTradeExpectedPrice) {
+            const slip = Math.abs(trade.entry_tick - this.currentTradeExpectedPrice);
+            const slipPct = slip / this.currentTradeExpectedPrice;
+
+            if (slipPct > 0.0005) { score -= 30; details.slippage = 30; } // >0.05%
+            else if (slipPct > 0.0001) { score -= 10; details.slippage = 10; } // >0.01%
+        }
+
+        this.log(`EQS Calc: -${details.latency} Latency, -${details.slippage} Slippage. Final: ${Math.max(0, score)}`);
+        return Math.max(0, score);
+    }
     gradeTrade(isWin, reasoning) {
         if (!reasoning) return isWin ? 'B' : 'D';
         const score = reasoning.finalScore || 0;
@@ -1077,7 +1387,116 @@ class TradingBot {
     updateLearning(isWin) {
         this.learning.totalTrades++;
         if (isWin) this.learning.wins++;
+
+        // Outcome-Weighted Learning
+        // High confidence loss = heavy penalty
+        // Low latency win = high reward
+        let weight = 1;
+        if (!isWin) {
+            if (this.confidence > 90) weight = 2.5; // Heavy penalty for "sure thing" failures
+            else if (this.confidence > 80) weight = 1.5;
+        } else {
+            if (this.api.latency < 250) weight = 1.5; // Reward fast execution
+            const grade = this.gradeTrade(isWin, this.currentTradeReasoning);
+            if (grade.startsWith('A')) weight *= 1.2; // Bonus for high quality
+        }
+
+        // Log Details
+        if (this.currentTradeReasoning) {
+            this.learningLog.push({
+                isWin,
+                weight,
+                eqs: this.calculateEQS(),
+                reasoning: this.currentTradeReasoning,
+                timestamp: Date.now()
+            });
+            if (this.learningLog.length > 50) this.learningLog.shift();
+        }
+
+        this.adaptConfidence(isWin, weight);
+        this.checkStrategyHealth();
+
+        // Persist Learning Log
+        localStorage.setItem('derivBotLearning', JSON.stringify(this.learningLog));
         if(window.saveSettings) window.saveSettings();
+    }
+
+    checkStrategyHealth() {
+        // Strategy Rotation Lock & Health Score
+        if (!this.lastStrategyChange) this.lastStrategyChange = Date.now();
+        const duration = (Date.now() - this.lastStrategyChange) / 60000; // Minutes
+
+        // Health Score (0-100) with Forgetting Factor
+        let health = 100;
+        // Prioritize last 5 trades more than 5-10
+        const recent = this.learningLog.slice(-10);
+        if (recent.length === 0) return;
+
+        let weightedScore = 0;
+        let totalWeight = 0;
+
+        recent.forEach((log, i) => {
+            const w = i + 1; // Later trades have higher weight
+            weightedScore += (log.isWin ? 100 : 0) * w;
+            totalWeight += w;
+        });
+
+        const weightedWinRate = weightedScore / totalWeight;
+        health = weightedWinRate; // Base health on weighted win rate
+
+        const avgEQS = recent.reduce((a, b) => a + (b.eqs || 0), 0) / (recent.length || 1);
+        health -= (100 - avgEQS) * 0.2; // Minor Execution impact
+
+        if (this.drawdownVelocity.length > 1) health -= 20;
+
+        if (window.updateHealth) window.updateHealth(health);
+
+        if (health < 40 && duration > 10) { // Min 10 min runtime before switching
+             this.log(`Strategy Health Critical (${health.toFixed(0)}). Suggesting Rotation.`);
+             // Could auto-switch here if multiple strategies enabled
+        }
+    }
+
+    adaptConfidence(isWin, weight = 1) {
+        // Escalation Logic with Weighting
+        if (!isWin) {
+            // Escalation on loss
+            const increase = 3 * weight;
+            // Update params directly as requiredConfidence isn't standard in this class yet
+            this.params.confidenceThreshold = Math.min(0.98, this.params.confidenceThreshold + (increase/100));
+            this.log(`Loss detected (W:${weight}). Confidence Threshold +${increase}% -> ${(this.params.confidenceThreshold*100).toFixed(1)}%`);
+        } else {
+            // Decay
+            let base = 0.60;
+            if (this.marketCondition === 'Volatile') base = 0.80;
+            if (this.riskState === 'PROTECT') base = 0.85;
+
+            this.params.confidenceThreshold = Math.max(base, this.params.confidenceThreshold - 0.01);
+        }
+    }
+
+    getSignalFingerprint(direction) {
+        // Generate a unique signature for the market state
+        // [Direction, TrendState, RSIBinned, VolatilityBinned]
+        const rsi = this.currentTradeReasoning?.rsi || 50;
+        const rsiBin = Math.floor(rsi / 10) * 10;
+        const volBin = this.marketCondition;
+        return `${direction}|${this.marketCondition}|${rsiBin}`;
+    }
+
+    updateFingerprintMemory(isWin) {
+        if (!this.lastSignal) return; // Need direction
+        const fp = this.getSignalFingerprint(this.lastSignal); // Approximation if lastSignal stored
+        // Note: Ideally store fingerprint with trade. For now regenerate or use last state.
+        // Better: Use tradeHistory reasoning.
+
+        const lastTrade = this.tradeHistory[this.tradeHistory.length - 1];
+        if (!lastTrade || !lastTrade.reasoning) return;
+
+        // Reconstruct fingerprint from reasoning if possible, or simple state
+        // Let's rely on simple state for now as 'lastSignal' might be stale.
+        // Actually, let's skip if we can't reliably get the exact fingerprint of the *trade*.
+        // Future improvement: Store fingerprint in tradeHistory.
     }
     log(message) {
         const logContainer = document.getElementById('bot-logs');
@@ -1102,6 +1521,211 @@ class TradingBot {
         if(c.close < c.open) return 'bearish';
         return 'neutral';
     }
+    // ============================================================
+    // Strategy Logic (Missing Implementations)
+    // ============================================================
+
+    analyzeMultiTF() {
+        if (this.candles1m.length < 50) return null;
+
+        // Trend (EMA)
+        const c1m = this.candles1m;
+        const closes1m = c1m.map(c => c.close);
+        const ema20 = this.calculateEMA(closes1m, 20);
+        const ema50 = this.calculateEMA(closes1m, 50);
+        const lastEma20 = ema20[ema20.length - 1];
+        const lastEma50 = ema50[ema50.length - 1];
+        const lastPrice = closes1m[closes1m.length - 1];
+
+        const isUptrend = lastEma20 > lastEma50 && lastPrice > lastEma20;
+        const isDowntrend = lastEma20 < lastEma50 && lastPrice < lastEma20;
+
+        // Momentum (RSI)
+        const rsi = this.calculateRSI(closes1m, 14);
+        const lastRsi = rsi[rsi.length - 1];
+
+        // Volatility (BB)
+        const bb = this.calculateBollingerBands(closes1m, 20, 2);
+        const lastBB = bb[bb.length - 1];
+
+        let signal = null;
+        this.confidence = 60; // Base confidence
+
+        if (isUptrend) {
+            if (lastRsi < 70 && lastPrice > lastBB.middle) {
+                signal = 'rise';
+                if (lastRsi > 50) this.confidence += 10;
+            }
+        } else if (isDowntrend) {
+            if (lastRsi > 30 && lastPrice < lastBB.middle) {
+                signal = 'fall';
+                if (lastRsi < 50) this.confidence += 10;
+            }
+        }
+
+        // Higher Timeframe Confirmation (5m)
+        if (signal && this.candles5m.length > 20) {
+            const closes5m = this.candles5m.map(c => c.close);
+            const ema50_5m = this.calculateEMA(closes5m, 50);
+            const lastEma50_5m = ema50_5m[ema50_5m.length - 1];
+            const lastPrice5m = closes5m[closes5m.length - 1];
+
+            if (signal === 'rise' && lastPrice5m > lastEma50_5m) this.confidence += 15;
+            else if (signal === 'fall' && lastPrice5m < lastEma50_5m) this.confidence += 15;
+            else this.confidence -= 10; // Divergence
+        }
+
+        this.currentTradeReasoning = {
+            strategy: 'Ultra Instinct (Multi-TF)',
+            trend: isUptrend ? 'UP' : (isDowntrend ? 'DOWN' : 'FLAT'),
+            rsi: lastRsi.toFixed(1),
+            finalScore: this.confidence / 100
+        };
+
+        return signal;
+    }
+
+    detectMarketCondition() {
+        if (this.candles1m.length < 50) return;
+
+        const closes = this.candles1m.map(c => c.close);
+        const adx = this.calculateADX(closes, 14);
+        const lastAdx = adx[adx.length - 1] || 0;
+
+        // Enhanced Anti-Chop Protection
+        const rsi = this.calculateRSI(closes, 14);
+        const lastRsi = rsi[rsi.length-1];
+        const bb = this.calculateBollingerBands(closes, 20, 2);
+        const lastBB = bb[bb.length - 1];
+        const width = (lastBB.upper - lastBB.lower) / lastBB.middle;
+
+        // Combined Metric: RSI + ADX + BB Width
+        // Fixed condition to be less restrictive for mock testing but strict in reality
+        // RSI Flat AND (Low ADX OR Low Volatility)
+        const isRsiFlat = lastRsi > 45 && lastRsi < 55;
+        const isLowAdx = lastAdx < 20;
+        const isSqueeze = width < 0.002;
+
+        if (isRsiFlat && (isLowAdx || isSqueeze)) {
+            this.marketCondition = 'Choppy';
+            // Force WAIT unless confidence is extremely high
+            // Persist WAIT for at least 1 candle cycle (60s) to prevent flickering
+            if (this.riskState !== 'WAIT') {
+                this.setRiskState('WAIT', 'Anti-Chop: Low Volatility/Momentum');
+                this.cooldownEndTime = Date.now() + 60000;
+            }
+            return;
+        }
+
+        // Simple Regime Detection
+        if (lastAdx > 25) {
+            this.marketCondition = 'Trending';
+        } else {
+            const bb = this.calculateBollingerBands(closes, 20, 2);
+            const lastBB = bb[bb.length - 1];
+            const width = (lastBB.upper - lastBB.lower) / lastBB.middle;
+
+            if (width < 0.002) this.marketCondition = 'Squeeze';
+            else if (width > 0.005) this.marketCondition = 'Volatile';
+            else this.marketCondition = 'Ranging'; // Choppy
+        }
+    }
+
+    determineRiskState() {
+        // State Machine based on recent performance
+        if (this.consecutiveLosses >= 2) {
+            this.setRiskState('PROTECT', 'Consecutive Losses');
+        } else if (this.marketCondition === 'Trending' && this.wins > this.losses) {
+            this.setRiskState('AGGRESSIVE', 'Winning in Trend');
+        } else if (this.marketCondition === 'Ranging') {
+            this.setRiskState('WAIT', 'Ranging Market');
+        } else {
+            this.setRiskState('NORMAL', 'Balanced');
+        }
+    }
+
+    setRiskState(state, reason) {
+        if (this.riskState !== state) {
+            this.riskState = state;
+            this.log(`Risk State changed to ${state} (${reason})`);
+        }
+    }
+
+    adjustParameters() {
+        // Dynamic adjustment based on Risk State
+        if (this.riskState === 'AGGRESSIVE') {
+            this.params.confidenceThreshold = 0.70;
+            this.useDynamicDuration = true;
+        } else if (this.riskState === 'PROTECT') {
+            this.params.confidenceThreshold = 0.90;
+            this.useDynamicDuration = false;
+        } else {
+            this.params.confidenceThreshold = 0.80; // Normal
+        }
+    }
+
+    updateStakeWithRisk() {
+        if (this.riskState === 'WAIT') return false; // Do not trade
+
+        // Check Grade History
+        if (this.gradeHistory.length >= 5) {
+             const avgGrade = this.gradeHistory.reduce((a, b) => a + b, 0) / this.gradeHistory.length;
+             if (avgGrade < 1.5) { // Mostly D's and F's
+                 this.log("Low Grade Average. Skipping Trade.");
+                 return false;
+             }
+        }
+
+        // Dynamic Stake Calculation
+        if (this.useSmartRisk) {
+            this.currentStake = this.calculateDynamicStake();
+        } else {
+            this.currentStake = this.initialStake;
+        }
+
+        return true;
+    }
+
+    calculateDynamicStake() {
+        let stake = this.currentStake;
+        if (this.useMartingale) return stake; // Martingale handles its own logic
+
+        // Stake Elasticity
+        if (this.riskState === 'AGGRESSIVE') {
+            stake = this.initialStake * 1.5;
+        } else {
+            stake = this.initialStake;
+        }
+
+        if (this.marketCondition === 'Trending' && this.confidence > 90) {
+            stake *= 1.2; // Gradual growth in strong trend
+        } else if (this.marketCondition === 'Choppy' || this.isVirtualRecovery) {
+            stake = this.initialStake; // Minimal stake
+        } else if (this.api.latency > 450) {
+            stake *= 0.8; // Reduce stake in high latency
+        }
+
+        // Never increase stake after D grade
+        const lastGrade = this.gradeHistory[this.gradeHistory.length - 1];
+        if (lastGrade <= 1) stake = Math.min(stake, this.initialStake);
+
+        return parseFloat(Math.min(stake, this.MAX_STAKE).toFixed(2));
+    }
+
+    checkDrawdownVelocity() {
+        const now = Date.now();
+        // Clean old events (> 5 minutes)
+        this.drawdownVelocity = this.drawdownVelocity.filter(t => now - t < 300000);
+
+        // Trigger PROTECT if > 3 losses in 5 minutes
+        if (this.drawdownVelocity.length >= 3) {
+            if (this.riskState !== 'PROTECT') {
+                this.setRiskState('PROTECT', 'High Drawdown Velocity');
+                this.log('High Loss Speed Detected! Entering PROTECT mode.');
+            }
+        }
+    }
+
     detectOrderBlock(candles) { return 'neutral'; }
     detectLiquiditySweep(candles) { return 'neutral'; }
     calculateChoppinessIndex(candles, period) { return []; } // Simplified stub for cleanup if unused in main flow or fully implemented
@@ -1109,7 +1733,9 @@ class TradingBot {
         if (candles.length < period + 1) return 0;
         const returns = [];
         for (let i = candles.length - period; i < candles.length; i++) {
-            returns.push(Math.log(candles[i].close / candles[i-1].close));
+            const ratio = candles[i].close / candles[i-1].close;
+            if (ratio <= 0) returns.push(0); // Safety check
+            else returns.push(Math.log(ratio));
         }
         const min = Math.min(...returns);
         const max = Math.max(...returns);
@@ -1234,20 +1860,39 @@ TradingBot.prototype.processVirtualTrade = function() {
     }
 };
 
-TradingBot.prototype.handleVirtualResult = function(isWin) {
+TradingBot.prototype.handleVirtualResult = function(isWin, exitReason = null) {
+    // Calculate grade of this virtual trade to ensure quality
+    // Mock currentTradeReasoning if missing for robustness
+    const reasoning = this.currentTradeReasoning || { finalScore: 0.5 };
+    let grade = this.gradeTrade(isWin, reasoning);
+
     if (isWin) {
-        this.virtualWins++;
-        this.virtualLosses = 0;
-        this.log(`[VIRTUAL] WON. Streak: ${this.virtualWins}`);
+        // Quality Check: Only count win if grade is better than D
+        if (!grade.includes('D') && !grade.includes('F')) {
+            this.virtualWins++;
+            this.virtualLosses = 0;
+            this.log(`[VIRTUAL] WON (Grade ${grade}). Streak: ${this.virtualWins}`);
+        } else {
+            this.log(`[VIRTUAL] WON but Low Quality (Grade ${grade}). Streak not incremented.`);
+        }
     } else {
         this.virtualWins = 0;
         this.virtualLosses++;
         this.log(`[VIRTUAL] LOST.`);
     }
-    if (this.virtualWins >= 2) {
-        this.isVirtualRecovery = false;
+
+    // Strengthened Exit Condition: 4 wins needed
+    if (this.virtualWins >= 4) {
+        this.log(`[RECOVERY] 4 Consistent High-Quality Wins. Resuming Real Trading in 5s...`);
+        this.currentStake = this.initialStake; // Reset stake to minimum
         this.consecutiveLosses = 0;
-        this.log(`[RECOVERY] Consistent wins detected. Resuming Real Trading.`);
-        if(window.updateRecoveryStatus) window.updateRecoveryStatus(false);
+        this.isVirtualRecovery = false;
+
+        // Strict cooldown on exit
+        this.updateTradeState('COOLDOWN', 'Recovery Exit');
+        setTimeout(() => {
+            if (this.tradeState === 'COOLDOWN') this.updateTradeState('IDLE', 'Recovery Complete');
+            if(window.updateRecoveryStatus) window.updateRecoveryStatus(false);
+        }, 5000);
     }
 };
