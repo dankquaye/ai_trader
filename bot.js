@@ -94,6 +94,7 @@ class TradingBot {
         this.gradeStats = { A: 0, B: 0, C: 0, D: 0, F: 0, Total: 0 };
         this.activeContracts = new Map();
         this.pendingSymbol = null;
+        this.persistedSignal = null;
 
         // --- Learning ---
         this.learning = { totalTrades: 0, wins: 0, threshold: 4.5 };
@@ -337,40 +338,70 @@ class TradingBot {
 
         if (Date.now() < this.cooldownEndTime && !this.isBacktesting) return;
 
+        // --- Signal Persistence Check ---
+        let signal = null;
+        if (this.persistedSignal) {
+             const { direction, expiry, symbol, confidence } = this.persistedSignal;
+             if (Date.now() > expiry || symbol !== this.currentSymbol) {
+                 this.persistedSignal = null; // Expired or Invalid
+             } else {
+                 signal = direction;
+                 this.confidence = confidence; // Restore confidence
+             }
+        }
+
         this.detectMarketCondition();
         this.determineRiskState(); // Update Risk State Machine
         this.adjustParameters();
-
-        // Enforce WAIT MODE
-        if (this.riskState === 'WAIT' && !this.isBacktesting) {
-            this.lastSignal = null;
-            return;
-        }
 
         if (!this.isBacktesting) {
             this.checkSessionLimits();
         }
 
-        // 1. ANALYZE FIRST (Set Confidence)
         const startSymbol = this.currentSymbol; // Freeze symbol before async analysis
-        let signal = await this.analyze();
 
-        // Safety Check: Did symbol change during analysis?
-        if (this.currentSymbol !== startSymbol) {
-            this.log('State changed during analysis. Aborting trade execution.');
-            return;
+        // 1. ANALYZE (if no persisted signal)
+        if (!signal) {
+             let potentialSignal = await this.analyze();
+
+             // Safety Check: Did symbol change during analysis?
+             if (this.currentSymbol !== startSymbol) {
+                 this.log('State changed during analysis. Aborting trade execution.');
+                 return;
+             }
+
+             if (potentialSignal) {
+                 // Enforce WAIT MODE (Modified): Allow high confidence
+                 if (this.riskState === 'WAIT' && !this.isBacktesting && this.confidence < 85) {
+                     potentialSignal = null;
+                 } else {
+                     signal = potentialSignal;
+                     // Persist it
+                     this.persistedSignal = {
+                         direction: signal,
+                         timestamp: Date.now(),
+                         expiry: Date.now() + 6000, // 6s Persistence
+                         confidence: this.confidence,
+                         symbol: this.currentSymbol
+                     };
+                 }
+             }
         }
 
         // 2. CALCULATE STAKE & VALIDATE GRADE (After Confidence is set)
         if (signal) {
             const canTrade = this.updateStakeWithRisk(); // Returns false if D/F Grade
-            if (!canTrade) signal = null;
+            if (!canTrade) {
+                signal = null;
+                this.persistedSignal = null;
+            }
         }
 
         // Final Confidence Check
         let minConfidence = this.isSmallAccount ? 80 : 60;
         if (signal && this.confidence < minConfidence) {
             signal = null;
+            this.persistedSignal = null;
         }
 
         // 3. EXECUTE
@@ -378,7 +409,11 @@ class TradingBot {
             if (this.isBacktesting) {
                 this.lastSignal = signal;
             } else {
-                this.watchdogAttemptExecution(signal, startSymbol);
+                const executed = this.watchdogAttemptExecution(signal, startSymbol);
+                if (executed) {
+                    this.persistedSignal = null; // Success
+                }
+                // If not executed, it remains in persistedSignal for next tick
             }
         } else {
             this.lastSignal = null;
@@ -721,26 +756,26 @@ class TradingBot {
     // ============================================================
 
     watchdogAttemptExecution(direction, symbol) {
-        if (this.watchdog.state !== 'IDLE' && this.watchdog.state !== 'ANALYZING') return;
-        if (this.isPaused) return;
-        if (this.hasOpenTrade || this.api.pendingTrade) return;
+        if (this.watchdog.state !== 'IDLE' && this.watchdog.state !== 'ANALYZING') return false;
+        if (this.isPaused) return false;
+        if (this.hasOpenTrade || this.api.pendingTrade) return false;
 
         if (this.api.latency > 250) {
             this.log(`Watchdog blocked: High Latency (${this.api.latency}ms).`);
-            return;
+            return false;
         }
 
         // Losing Streak Protection
         if (this.consecutiveLosses >= 2) {
             if (this.confidence < 90 && this.marketCondition !== 'Trending') {
                 this.log(`Watchdog blocked: Losing Streak Protection. Need >90% Confidence or Trending Market.`);
-                return;
+                return false;
             }
         }
 
         if (this.isVirtualRecovery) {
             this.executeVirtualTrade(direction);
-            return;
+            return true;
         }
 
         this.setWatchdogState('LOCKED');
@@ -748,7 +783,7 @@ class TradingBot {
         const now = Date.now();
         if (this.lastTradeTime && (now - this.lastTradeTime < 2000)) {
              this.setWatchdogState('IDLE'); // Too fast
-             return;
+             return false;
         }
         this.lastTradeTime = now;
         this.hasOpenTrade = true;
@@ -770,6 +805,8 @@ class TradingBot {
                 this.setWatchdogState('IDLE');
             }
         }, 5000);
+
+        return true;
     }
 
     setWatchdogState(newState) {
