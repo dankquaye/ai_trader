@@ -207,7 +207,7 @@ class DerivAPI {
         }, true).then(resp => resp.candles || []);
     }
 
-    placeTrade(direction, amount, duration, symbol) {
+    placeTrade(direction, amount, duration, symbol, duration_unit = 't') {
         const contractType = direction === 'rise' ? 'CALL' : 'PUT';
 
         const proposalReq = {
@@ -217,7 +217,7 @@ class DerivAPI {
             contract_type: contractType,
             currency: 'USD',
             duration: duration,
-            duration_unit: 't',
+            duration_unit: duration_unit,
             symbol: symbol
         };
 

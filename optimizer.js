@@ -141,3 +141,4 @@ class AdaptiveOptimizer {
         p.wAI /= total;
     }
 }
+window.AdaptiveOptimizer = AdaptiveOptimizer;

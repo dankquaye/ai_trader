@@ -102,6 +102,7 @@ class TradingBot {
         this.isVirtualRecovery = false;
         this.virtualWins = 0;
         this.virtualLosses = 0;
+        this.virtualTrade = null;
 
         this.currentTradeReasoning = null;
         this.currentTradeExpectedPrice = 0;
@@ -482,6 +483,22 @@ class TradingBot {
          return null;
     }
 
+    analyzeNeuralTrend(prices) {
+        if (prices.length < 200) return null;
+        const ema50 = this.calculateEMA(prices, 50);
+        const ema200 = this.calculateEMA(prices, 200);
+        const rsi = this.calculateRSI(prices, 14);
+        const lastPrice = prices[prices.length - 1];
+        const l50 = ema50[ema50.length-1];
+        const l200 = ema200[ema200.length-1];
+        const lRsi = rsi[rsi.length-1];
+        const distFromEma = Math.abs(lastPrice - l50) / l50;
+        const isExtended = distFromEma > 0.001;
+        if (l50 > l200 && lastPrice > l50 && lRsi > 50 && lRsi < 75 && !isExtended) return 'rise';
+        if (l50 < l200 && lastPrice < l50 && lRsi < 50 && lRsi > 25 && !isExtended) return 'fall';
+        return null;
+    }
+
     // ============================================================
     // Advanced Quantum & AI Engines
     // ============================================================
@@ -567,8 +584,6 @@ class TradingBot {
         // Layer 4: Superposition Delay Engine
         return this.qtSuperpositionEngine(direction, finalScore);
     }
-
-    // ... (Helper engines: qtTrendEngine, qtMomentumEngine, etc. preserved)
 
     qtTrendEngine() {
         const c1m = this.candles1m;
@@ -965,8 +980,6 @@ class TradingBot {
         return seq;
     }
 
-    // ... (Indicator methods: calculateSMA, calculateEMA, calculateRSI, etc. preserved)
-
     calculateSMA(data, period) {
         let result = [];
         for (let i = 0; i < data.length; i++) {
@@ -1090,10 +1103,6 @@ class TradingBot {
         console.log(`[BOT] ${message}`);
     }
 
-    // (Preserved legacy analysis methods for completeness)
-    analyzeNeuralTrend(prices) { /*...*/ return null; } // Placeholder for brevity, logic was already simplified in analyze()
-
-    // (Helper detection methods)
     detectCandlePattern(candles) {
         if(candles.length < 5) return 'neutral';
         const c = candles[candles.length-1];
@@ -1104,150 +1113,188 @@ class TradingBot {
     }
     detectOrderBlock(candles) { return 'neutral'; }
     detectLiquiditySweep(candles) { return 'neutral'; }
-    calculateChoppinessIndex(candles, period) { return []; } // Simplified stub for cleanup if unused in main flow or fully implemented
+
+    // Updated Helper Implementations
+
     calculateShannonEntropy(candles, period) {
         if (candles.length < period + 1) return 0;
         const returns = [];
         for (let i = candles.length - period; i < candles.length; i++) {
-            returns.push(Math.log(candles[i].close / candles[i-1].close));
+            const val = candles[i].close / candles[i-1].close;
+            // Guard against negative/zero value in log
+            const safeVal = val <= 0 ? 0.000001 : val;
+            returns.push(Math.log(safeVal));
         }
         const min = Math.min(...returns);
         const max = Math.max(...returns);
         const binCount = Math.floor(Math.sqrt(period));
+
+        // Safety check for bin calculation
+        if (binCount === 0 || max === min) return 0;
+
         const binSize = (max - min) / binCount;
         if (binSize === 0) return 0;
+
         const bins = {};
         returns.forEach(r => {
             const key = Math.floor((r - min) / binSize);
             bins[key] = (bins[key] || 0) + 1;
         });
+
         let entropy = 0;
         for (const key in bins) {
             const p = bins[key] / period;
-            entropy -= p * Math.log(p);
+            if (p > 0) entropy -= p * Math.log(p);
         }
         return entropy;
     }
-    calculateMACD(data, f, s, sig) {
-        return { macdLine: [], signalLine: [], histogram: [] }; // Stub
-    }
 
-    // ... Re-add full implementations for critical helpers ...
-}
-
-// Restore full implementations for helpers that were stubbed above to ensure functionality
-TradingBot.prototype.analyzeNeuralTrend = function(prices) {
-    if (prices.length < 200) return null;
-    const ema50 = this.calculateEMA(prices, 50);
-    const ema200 = this.calculateEMA(prices, 200);
-    const rsi = this.calculateRSI(prices, 14);
-    const lastPrice = prices[prices.length - 1];
-    const l50 = ema50[ema50.length-1];
-    const l200 = ema200[ema200.length-1];
-    const lRsi = rsi[rsi.length-1];
-    const distFromEma = Math.abs(lastPrice - l50) / l50;
-    const isExtended = distFromEma > 0.001;
-    if (l50 > l200 && lastPrice > l50 && lRsi > 50 && lRsi < 75 && !isExtended) return 'rise';
-    if (l50 < l200 && lastPrice < l50 && lRsi < 50 && lRsi > 25 && !isExtended) return 'fall';
-    return null;
-};
-
-TradingBot.prototype.calculateChoppinessIndex = function(candles, period) {
-    let chop = [];
-    if (candles.length < period + 1) return [];
-    const atr = this.calculateATR(candles, 1);
-    for (let i = period; i < candles.length; i++) {
-        let sumTr = 0;
-        let maxHigh = -Infinity;
-        let minLow = Infinity;
-        for (let j = 0; j < period; j++) {
-            sumTr += atr[i-j] || 0;
-            maxHigh = Math.max(maxHigh, candles[i-j].high);
-            minLow = Math.min(minLow, candles[i-j].low);
+    calculateMACD(data, fastPeriod, slowPeriod, signalPeriod) {
+        const fastEMA = this.calculateEMA(data, fastPeriod);
+        const slowEMA = this.calculateEMA(data, slowPeriod);
+        const macdLine = [];
+        for(let i=0; i<data.length; i++) {
+            if (fastEMA[i] !== undefined && slowEMA[i] !== undefined) {
+                macdLine.push(fastEMA[i] - slowEMA[i]);
+            } else {
+                macdLine.push(0);
+            }
         }
-        const range = maxHigh - minLow;
-        if (range === 0) chop.push(50);
-        else chop.push(100 * Math.log10(sumTr / range) / Math.log10(period));
+        const signalLine = this.calculateEMA(macdLine, signalPeriod);
+        const histogram = [];
+        for(let i=0; i<data.length; i++) {
+            histogram.push(macdLine[i] - (signalLine[i] || 0));
+        }
+        return { macdLine, signalLine, histogram };
     }
-    return chop;
-};
 
-TradingBot.prototype.calculateMACD = function(data, fastPeriod, slowPeriod, signalPeriod) {
-    const fastEMA = this.calculateEMA(data, fastPeriod);
-    const slowEMA = this.calculateEMA(data, slowPeriod);
-    const macdLine = [];
-    for(let i=0; i<data.length; i++) {
-        if (fastEMA[i] !== undefined && slowEMA[i] !== undefined) {
-            macdLine.push(fastEMA[i] - slowEMA[i]);
+    calculateChoppinessIndex(candles, period) {
+        let chop = [];
+        if (candles.length < period + 1) return [];
+        const atr = this.calculateATR(candles, 1);
+        for (let i = period; i < candles.length; i++) {
+            let sumTr = 0;
+            let maxHigh = -Infinity;
+            let minLow = Infinity;
+            for (let j = 0; j < period; j++) {
+                sumTr += atr[i-j] || 0;
+                maxHigh = Math.max(maxHigh, candles[i-j].high);
+                minLow = Math.min(minLow, candles[i-j].low);
+            }
+            const range = maxHigh - minLow;
+            if (range === 0) chop.push(50);
+            else chop.push(100 * Math.log10(sumTr / range) / Math.log10(period));
+        }
+        return chop;
+    }
+
+    executeVirtualTrade(direction) {
+        if (this.ticks.length === 0) return;
+        let tradeDuration = this.useDynamicDuration ? 2 : this.duration;
+        this.virtualTrade = {
+            entryPrice: this.ticks[this.ticks.length-1],
+            direction: direction,
+            startTime: Date.now(),
+            duration: tradeDuration,
+            startTickIndex: this.ticks.length
+        };
+        this.log(`[VIRTUAL] Simulating ${direction} trade...`);
+        this.hasOpenTrade = true;
+    }
+
+    processVirtualTrade() {
+        if (!this.virtualTrade) return;
+        const currentTickIndex = this.ticks.length;
+        const currentPrice = this.ticks[currentTickIndex - 1];
+        const { entryPrice, direction, startTickIndex, duration } = this.virtualTrade;
+        let pnlPct = (currentPrice - entryPrice) / entryPrice;
+        if (direction === 'fall') pnlPct = -pnlPct;
+
+        if (pnlPct < -0.0005) { // Stop Loss
+             this.hasOpenTrade = false;
+             this.virtualTrade = null;
+             this.handleVirtualResult(false, 'stop_loss');
+             return;
+        }
+        if (pnlPct > 0.001 && (currentTickIndex - startTickIndex) <= 2) { // Scalp
+             this.hasOpenTrade = false;
+             this.virtualTrade = null;
+             this.handleVirtualResult(true, 'momentum_scalp');
+             return;
+        }
+        if (currentTickIndex - startTickIndex >= duration) { // Expiry
+            const isWin = pnlPct > 0;
+            this.hasOpenTrade = false;
+            this.virtualTrade = null;
+            this.handleVirtualResult(isWin, 'expiry');
+        }
+    }
+
+    handleVirtualResult(isWin) {
+        if (isWin) {
+            this.virtualWins++;
+            this.virtualLosses = 0;
+            this.log(`[VIRTUAL] WON. Streak: ${this.virtualWins}`);
         } else {
-            macdLine.push(0);
+            this.virtualWins = 0;
+            this.virtualLosses++;
+            this.log(`[VIRTUAL] LOST.`);
+        }
+        if (this.virtualWins >= 2) {
+            this.isVirtualRecovery = false;
+            this.consecutiveLosses = 0;
+            this.log(`[RECOVERY] Consistent wins detected. Resuming Real Trading.`);
+            if(window.updateRecoveryStatus) window.updateRecoveryStatus(false);
         }
     }
-    const signalLine = this.calculateEMA(macdLine, signalPeriod);
-    const histogram = [];
-    for(let i=0; i<data.length; i++) {
-        histogram.push(macdLine[i] - (signalLine[i] || 0));
-    }
-    return { macdLine, signalLine, histogram };
-};
 
-// ... Restore virtual trading logic
-TradingBot.prototype.executeVirtualTrade = function(direction) {
-    if (this.ticks.length === 0) return;
-    let tradeDuration = this.useDynamicDuration ? 2 : this.duration;
-    this.virtualTrade = {
-        entryPrice: this.ticks[this.ticks.length-1],
-        direction: direction,
-        startTime: Date.now(),
-        duration: tradeDuration,
-        startTickIndex: this.ticks.length
-    };
-    this.log(`[VIRTUAL] Simulating ${direction} trade...`);
-    this.hasOpenTrade = true;
-};
+    // Methods that were missing from analyzeSafe or referenced but not implemented
+    detectMarketCondition() {
+        if(this.candles1m.length < 20) return;
+        const closes = this.candles1m.map(c => c.close);
+        const adx = this.calculateADX(closes, 14).pop() || 0;
+        const bb = this.calculateBollingerBands(closes, 20, 2);
+        const lastBB = bb[bb.length-1];
+        const bbWidth = (lastBB.upper - lastBB.lower) / lastBB.middle;
 
-TradingBot.prototype.processVirtualTrade = function() {
-    if (!this.virtualTrade) return;
-    const currentTickIndex = this.ticks.length;
-    const currentPrice = this.ticks[currentTickIndex - 1];
-    const { entryPrice, direction, startTickIndex, duration } = this.virtualTrade;
-    let pnlPct = (currentPrice - entryPrice) / entryPrice;
-    if (direction === 'fall') pnlPct = -pnlPct;
+        const rsi = this.calculateRSI(closes, 14);
+        const lastRsi = rsi[rsi.length-1] || 50;
 
-    if (pnlPct < -0.0005) { // Stop Loss
-         this.hasOpenTrade = false;
-         this.virtualTrade = null;
-         this.handleVirtualResult(false, 'stop_loss');
-         return;
+        if(adx < 20 && bbWidth < 0.002 && (lastRsi > 45 && lastRsi < 55)) {
+            this.marketCondition = 'Choppy';
+            this.setRiskState('WAIT', 'Market Choppy');
+        } else if(adx > 25) {
+            this.marketCondition = 'Trending';
+            this.setRiskState('NORMAL');
+        } else {
+            this.marketCondition = 'Ranging';
+            this.setRiskState('NORMAL');
+        }
     }
-    if (pnlPct > 0.001 && (currentTickIndex - startTickIndex) <= 2) { // Scalp
-         this.hasOpenTrade = false;
-         this.virtualTrade = null;
-         this.handleVirtualResult(true, 'momentum_scalp');
-         return;
-    }
-    if (currentTickIndex - startTickIndex >= duration) { // Expiry
-        const isWin = pnlPct > 0;
-        this.hasOpenTrade = false;
-        this.virtualTrade = null;
-        this.handleVirtualResult(isWin, 'expiry');
-    }
-};
 
-TradingBot.prototype.handleVirtualResult = function(isWin) {
-    if (isWin) {
-        this.virtualWins++;
-        this.virtualLosses = 0;
-        this.log(`[VIRTUAL] WON. Streak: ${this.virtualWins}`);
-    } else {
-        this.virtualWins = 0;
-        this.virtualLosses++;
-        this.log(`[VIRTUAL] LOST.`);
+    determineRiskState() {
+        if(this.consecutiveLosses >= 2) this.riskState = 'PROTECT';
     }
-    if (this.virtualWins >= 2) {
-        this.isVirtualRecovery = false;
-        this.consecutiveLosses = 0;
-        this.log(`[RECOVERY] Consistent wins detected. Resuming Real Trading.`);
-        if(window.updateRecoveryStatus) window.updateRecoveryStatus(false);
+
+    adjustParameters() {
+        // Placeholder for dynamic parameter adjustment logic if not handled by Optimizer
     }
-};
+
+    updateStakeWithRisk() {
+        if (this.riskState === 'WAIT') return false;
+
+        // Grade validation logic
+        if (this.gradeHistory.length >= 5) {
+            const avgGrade = this.gradeHistory.reduce((a, b) => a + b, 0) / this.gradeHistory.length;
+            if (avgGrade < 1.5) return false; // Fail
+        }
+        return true;
+    }
+
+    // Advanced analysisMultiTF logic (ultra_instinct)
+    analyzeMultiTF() {
+         // Re-using quantum engine logic or simplified version
+         // For now, mapping to quantum engine as default advanced strategy
+         return this.analyzeQuantumEnlargement();
+    }
+}
