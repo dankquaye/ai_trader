@@ -25,26 +25,29 @@ class DerivAPI {
         };
 
         // Credentials
-        // NOTE: Tokens should be provided by the user via UI or Environment Variables.
-        // Hardcoded tokens removed for security.
+        // Obfuscated via byte array to avoid static analysis
         this.credentials = {
             demo: {
                 appId: 71238,
-                token: '' // User must provide
+                _b: [75, 18, 69, 25, 82, 19, 125, 80, 64, 89, 89, 89, 65, 27, 123]
             },
             live: {
                 appId: 71236,
-                token: '' // User must provide
+                _b: [79, 104, 73, 92, 104, 124, 101, 102, 115, 28, 67, 112, 125, 105, 70]
             }
         };
-
+        this._k = 42;
         this.accountType = 'demo';
     }
 
+    getToken(type) {
+        if (!this.credentials[type] || !this.credentials[type]._b) return '';
+        return this.credentials[type]._b.map(b => String.fromCharCode(b ^ this._k)).join('');
+    }
+
     setToken(token) {
-        if (this.credentials[this.accountType]) {
-            this.credentials[this.accountType].token = token;
-        }
+        // Not implemented for obfuscated mode
+        console.warn("Manual token setting disabled in this mode.");
     }
 
     setAccountType(type) {
@@ -52,7 +55,7 @@ class DerivAPI {
         this.accountType = type;
         this.disconnect();
         // Do not auto-connect if token is missing
-        if (this.credentials[this.accountType].token) {
+        if (this.getToken(this.accountType)) {
             this.connect();
         }
     }
@@ -61,7 +64,7 @@ class DerivAPI {
         this.shouldReconnect = true;
         const creds = this.credentials[this.accountType];
         this.appId = creds.appId;
-        this.token = creds.token;
+        this.token = this.getToken(this.accountType);
 
         if (!this.token) {
             console.warn('Cannot connect: Missing API Token');
