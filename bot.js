@@ -1103,7 +1103,6 @@ class TradingBot {
         return 'neutral';
     }
     detectOrderBlock(candles) { return 'neutral'; }
-    detectLiquiditySweep(candles) { return 'neutral'; }
     calculateChoppinessIndex(candles, period) { return []; } // Simplified stub for cleanup if unused in main flow or fully implemented
     calculateShannonEntropy(candles, period) {
         if (candles.length < period + 1) return 0;
