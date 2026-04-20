@@ -419,7 +419,11 @@ class TradingBot {
              return null;
         }
 
-        if (this.strategy === 'random') return Math.random() > 0.5 ? 'rise' : 'fall';
+        if (this.strategy === 'random') {
+             const array = new Uint8Array(1);
+             window.crypto.getRandomValues(array);
+             return array[0] > 127 ? 'rise' : 'fall';
+        }
 
         // Legacy Strategies
         if (this.strategy === 'rsi') return this.analyzeRSI(prices, lastPrice);
