@@ -924,20 +924,39 @@ class TradingBot {
     // Helpers (Feature Extraction & Indicators)
     // ============================================================
 
-    extractFeatures(index) {
-        const closes = this.candles1m.map(c => c.close);
-        if (index < 30 || index >= closes.length) return null;
-
-        // Note: For performance, this recalculates entire array.
-        // In a highly optimized version, we would maintain rolling buffers.
-        const indicators = {
+    calculateAllIndicators(candles) {
+        const closes = candles.map(c => c.close);
+        return {
+            closes: closes,
             rsi: this.calculateRSI(closes, 14),
             adx: this.calculateADX(closes, 14),
             sma: this.calculateSMA(closes, 20),
             bb: this.calculateBollingerBands(closes, 20, 2),
             macd: this.calculateMACD(closes, 12, 26, 9).histogram,
-            atr: this.calculateATR(this.candles1m, 14)
+            atr: this.calculateATR(candles, 14)
         };
+    }
+
+    extractFeatures(index, preCalc = null) {
+        let closes;
+        let indicators;
+
+        if (preCalc) {
+            closes = preCalc.closes;
+            indicators = preCalc;
+        } else {
+            closes = this.candles1m.map(c => c.close);
+            indicators = {
+                rsi: this.calculateRSI(closes, 14),
+                adx: this.calculateADX(closes, 14),
+                sma: this.calculateSMA(closes, 20),
+                bb: this.calculateBollingerBands(closes, 20, 2),
+                macd: this.calculateMACD(closes, 12, 26, 9).histogram,
+                atr: this.calculateATR(this.candles1m, 14)
+            };
+        }
+
+        if (index < 30 || index >= closes.length) return null;
 
         const c = this.candles1m[index];
         const rsiVal = indicators.rsi[index] / 100;
@@ -956,9 +975,12 @@ class TradingBot {
 
     extractSequence(index, steps) {
         if (index < steps + 30) return null;
+
+        const preCalc = this.calculateAllIndicators(this.candles1m);
+
         const seq = [];
         for (let i = 0; i < steps; i++) {
-            const feat = this.extractFeatures(index - steps + 1 + i);
+            const feat = this.extractFeatures(index - steps + 1 + i, preCalc);
             if (!feat) return null;
             seq.push(feat);
         }
