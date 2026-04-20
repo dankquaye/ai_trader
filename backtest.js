@@ -213,7 +213,23 @@ class Backtester {
             value: this.currentBalance
         });
 
-        // Update Bot internal state (Learning)
+        // Update Bot internal state (State Management & Learning)
+        this.bot.totalProfit += profit;
+
+        if (isWin) {
+            this.bot.wins++;
+            this.bot.consecutiveLosses = 0;
+            if (this.bot.useMartingale) {
+                this.bot.currentStake = this.bot.initialStake;
+            }
+        } else {
+            this.bot.losses++;
+            this.bot.consecutiveLosses++;
+            if (this.bot.useMartingale) {
+                this.bot.currentStake = parseFloat((this.bot.currentStake * this.bot.martingaleMultiplier).toFixed(2));
+            }
+        }
+
         this.bot.updateLearning(isWin);
     }
 
