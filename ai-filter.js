@@ -251,6 +251,7 @@ class AIFilter {
                 regimeId: regimeIndex,
                 threshold: finalThreshold,
                 rlAction: rlAction,
+                confBucket: confBucket,
                 rawPredictions: predictions
             };
         });
