@@ -852,6 +852,79 @@ function showToast(message, type = 'info') {
     }, 3000);
 }
 
+function setupEventListeners() {
+    const on = (sel, ev, cb) => document.querySelectorAll(sel).forEach(el => el.addEventListener(ev, cb));
+    const click = (sel, cb) => on(sel, 'click', cb);
+
+    click('.nav-btn', (e) => {
+        ui.navBtns.forEach(b => b.classList.remove('active'));
+        e.currentTarget.classList.add('active');
+        ui.pages.forEach(p => p.classList.toggle('hidden', p.id !== e.currentTarget.dataset.target));
+    });
+
+    click('.modal-close, .modal-overlay', closeModal);
+    document.addEventListener('keydown', e => e.key === 'Escape' && closeModal());
+
+    const updateBotControls = (running) => {
+        ui.btns.startBot.classList.toggle('hidden', running);
+        ui.btns.stopBot.classList.toggle('hidden', !running);
+        ui.btns.pauseBot.classList.toggle('hidden', !running);
+        ui.btns.killSwitch.classList.toggle('hidden', !running);
+    };
+
+    if(ui.btns.startBot) click('#btn-start-bot', () => {
+        if (!ui.tokenInput.value && !window.api.token) return showToast('Enter API Token', 'error');
+        if (ui.tokenInput.value) window.api.authorize(ui.tokenInput.value);
+        bot.start();
+        updateBotControls(true);
+    });
+
+    if(ui.btns.stopBot) click('#btn-stop-bot', () => { bot.stop(); updateBotControls(false); });
+    if(ui.btns.killSwitch) click('#btn-kill-switch', () => { bot.stop(); updateBotControls(false); showToast('KILL SWITCH ACTIVATED', 'error'); });
+
+    if(ui.btns.pauseBot) click('#btn-pause-bot', () => {
+        const paused = bot.togglePause();
+        const icon = ui.btns.pauseBot.querySelector('i');
+        icon.className = paused ? 'fa-solid fa-play' : 'fa-solid fa-pause';
+        ui.btns.pauseBot.setAttribute('aria-label', paused ? 'Resume Bot' : 'Pause Bot');
+    });
+
+    if(ui.accountSelector) ui.accountSelector.addEventListener('change', e => bot.setAccountType(e.target.value));
+    if(ui.assetSelector) ui.assetSelector.addEventListener('change', e => {
+        bot.setSymbol(e.target.value);
+        if(window.api) { api.subscribeTicks(e.target.value); api.subscribeCandles(e.target.value, 60); api.getHistory(e.target.value); }
+        saveSettings();
+    });
+
+    const config = (sel, fn) => { const el = document.querySelector(sel); if(el) el.addEventListener('change', fn); };
+    config('#bot-strategy', e => { renderStrategyParams(e.target.value); bot.updateConfig(e.target.value, ui.botSettings.risk.value); saveSettings(); });
+    config('#bot-risk', e => { bot.updateConfig(ui.botSettings.strategy.value, e.target.value); saveSettings(); });
+
+    const toggle = () => {
+        bot.setFilter(ui.botSettings.useFilter.checked, ui.botSettings.adxThreshold.value, ui.botSettings.avoidSqueeze.checked);
+        bot.setAIFilter(ui.botSettings.useAIFilter.checked);
+        bot.setMoneyManagement(ui.botSettings.useMartingale.checked, ui.botSettings.martingaleMultiplier.value, ui.botSettings.takeProfit.value, ui.botSettings.stopLoss.value, ui.botSettings.useSmartRisk.checked);
+        ui.botSettings.autoSelect.checked ? startAutoScanner() : stopAutoScanner();
+        bot.setParamLock(ui.botSettings.lockParams.checked);
+        saveSettings();
+    };
+    document.querySelectorAll('#ai-robot input, #ai-robot select').forEach(el => el.addEventListener('change', toggle));
+
+    click('#btn-export-history', exportHistory);
+    click('#btn-run-backtest', runBacktest);
+    click('.btn-preset', (e) => applyPreset(e.currentTarget.dataset.preset));
+
+    click('#btn-load-challenge', () => { bot.setSmallAccountMode(true); applyPreset('conservative'); ui.inputs.stake.value = "10"; showToast('Challenge Mode Loaded', 'success'); });
+    click('#btn-send-support', () => showToast('Message sent!', 'success'));
+
+    const trade = (dir) => {
+        if(!window.api || !window.api.token) return showToast('Connect API first', 'error');
+        api.placeTrade(dir, parseFloat(ui.inputs.stake.value), parseInt(ui.inputs.duration.value), ui.assetSelector.value);
+    };
+    click('#btn-rise', () => trade('rise'));
+    click('#btn-fall', () => trade('fall'));
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     try {
         initChart();
