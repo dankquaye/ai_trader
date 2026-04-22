@@ -852,10 +852,59 @@ function showToast(message, type = 'info') {
     }, 3000);
 }
 
+
+function setupEventListeners() {
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            ui.pages.forEach(p => p.classList.add('hidden'));
+            document.getElementById(btn.dataset.target).classList.remove('hidden');
+            ui.navBtns.forEach(b => b.classList.remove('active', 'text-blue-500'));
+            btn.classList.add('active', 'text-blue-500');
+        });
+    });
+
+    document.querySelectorAll('.btn-preset').forEach(btn => {
+        btn.addEventListener('click', () => applyPreset(btn.dataset.preset));
+    });
+
+    if (ui.backtest.runBtn) {
+        ui.backtest.runBtn.addEventListener('click', runBacktest);
+    }
+
+    ui.modal.closes.forEach(btn => btn.addEventListener('click', closeModal));
+
+    ui.btns.startBot.addEventListener('click', () => {
+        if (bot.isRunning) return;
+        bot.start();
+        ui.btns.startBot.classList.add('hidden');
+        ui.btns.stopBot.classList.remove('hidden');
+        ui.btns.pauseBot.classList.remove('hidden');
+        ui.btns.killSwitch.classList.remove('hidden');
+        ui.btns.pauseBot.setAttribute('aria-label', 'Pause Bot');
+    });
+
+    ui.btns.stopBot.addEventListener('click', () => {
+        bot.stop();
+        ui.btns.startBot.classList.remove('hidden');
+        ui.btns.stopBot.classList.add('hidden');
+        ui.btns.pauseBot.classList.add('hidden');
+        ui.btns.killSwitch.classList.add('hidden');
+    });
+
+    ui.btns.pauseBot.addEventListener('click', () => {
+        bot.isPaused = !bot.isPaused;
+        const icon = bot.isPaused ? 'play' : 'pause';
+        ui.btns.pauseBot.innerHTML = `<i class="fa-solid fa-${icon}"></i>`;
+        ui.btns.pauseBot.setAttribute('aria-label', bot.isPaused ? 'Resume Bot' : 'Pause Bot');
+        showToast(bot.isPaused ? 'Bot Paused' : 'Bot Resumed', 'info');
+    });
+}
+
+
 document.addEventListener('DOMContentLoaded', () => {
     try {
         initChart();
-        setupEventListeners();
+        setupEventListeners(); // Initialize all UI event bindings
         setupApiCallbacks();
         loadSettings();
         showToast('Please enter your API Token to connect.', 'info');
