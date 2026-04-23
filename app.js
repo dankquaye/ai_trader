@@ -283,7 +283,7 @@ function updateLiveDashboard() {
 }
 
 // --- Sound Effects ---
-const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+const audioCtx = new window.AudioContext();
 
 function playSound(type) {
     if (audioCtx.state === 'suspended') audioCtx.resume();
