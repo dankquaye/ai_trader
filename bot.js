@@ -969,11 +969,15 @@ class TradingBot {
 
     calculateSMA(data, period) {
         let result = [];
+        let sum = 0;
         for (let i = 0; i < data.length; i++) {
-            if (i < period - 1) { result.push(null); continue; }
-            let sum = 0;
-            for (let j = 0; j < period; j++) sum += data[i - j];
-            result.push(sum / period);
+            sum += data[i];
+            if (i >= period) sum -= data[i - period];
+            if (i < period - 1) {
+                result.push(null);
+            } else {
+                result.push(sum / period);
+            }
         }
         return result;
     }
