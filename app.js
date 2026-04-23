@@ -183,14 +183,37 @@ async function runBacktest() {
             const tr = document.createElement('tr');
             tr.className = 'border-b border-gray-700';
             const color = t.result === 'WIN' ? 'text-green-400' : 'text-red-400';
-            tr.innerHTML = `
-                <td class="px-4 py-2">${t.time}</td>
-                <td class="px-4 py-2">${t.type}</td>
-                <td class="px-4 py-2">${t.entry.toFixed(2)}</td>
-                <td class="px-4 py-2">${t.exit.toFixed(2)}</td>
-                <td class="px-4 py-2 font-bold ${color}">${t.result}</td>
-                <td class="px-4 py-2 ${color}">$${t.profit.toFixed(2)}</td>
-            `;
+
+            const tdTime = document.createElement('td');
+            tdTime.className = "px-4 py-2";
+            tdTime.textContent = t.time;
+            tr.appendChild(tdTime);
+
+            const tdType = document.createElement('td');
+            tdType.className = "px-4 py-2";
+            tdType.textContent = t.type;
+            tr.appendChild(tdType);
+
+            const tdEntry = document.createElement('td');
+            tdEntry.className = "px-4 py-2";
+            tdEntry.textContent = t.entry.toFixed(2);
+            tr.appendChild(tdEntry);
+
+            const tdExit = document.createElement('td');
+            tdExit.className = "px-4 py-2";
+            tdExit.textContent = t.exit.toFixed(2);
+            tr.appendChild(tdExit);
+
+            const tdResult = document.createElement('td');
+            tdResult.className = `px-4 py-2 font-bold ${color}`;
+            tdResult.textContent = t.result;
+            tr.appendChild(tdResult);
+
+            const tdProfit = document.createElement('td');
+            tdProfit.className = `px-4 py-2 ${color}`;
+            tdProfit.textContent = `$${t.profit.toFixed(2)}`;
+            tr.appendChild(tdProfit);
+
             ui.backtest.logBody.appendChild(tr);
         });
 
