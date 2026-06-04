@@ -1,3 +1,6 @@
 ## 2024-05-18 - [Trade History Empty State]
 **Learning:** Tables displaying dynamic data, such as the Trade History table, should implement a helpful empty state with an icon and message when no data is present, rather than leaving the table body empty.
 **Action:** Implemented an empty state rendering logic in `app.js` using `colspan="7"` to span the table width.
+## 2024-05-19 - Semantic Buttons and Accessible Focus States
+**Learning:** In this application, custom interactive elements originally built with `<div>` (such as the modal close button) lack both native semantics for screen readers and built-in keyboard navigation support. Adding `aria-label` alone isn't enough; the elements need to be migrated to semantic `<button type="button">` elements. Icon-only buttons (like `#btn-pause-bot`) also need explicit `aria-label` attributes to convey their purpose to assistive technologies. Additionally, custom interactive elements need explicit visual focus indicators for keyboard navigation.
+**Action:** When migrating `<div>` buttons or updating icon-only buttons, consistently use `<button type="button">` with `aria-label` and include Tailwind classes like `focus:outline-none focus:ring-2 focus:ring-blue-500` to ensure both screen reader and keyboard navigation accessibility.
