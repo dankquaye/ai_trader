@@ -261,7 +261,6 @@ class DerivAPI {
 
         switch (msgType) {
             case 'authorize':
-                console.log('Authorized:', data.authorize.email);
                 if (this.msgHandlers['authorize']) this.msgHandlers['authorize'](data.authorize);
                 this.send({ balance: 1, subscribe: 1 });
                 this.startPing();
@@ -296,7 +295,6 @@ class DerivAPI {
                 break;
 
             case 'buy':
-                console.log('Trade placed:', data.buy);
                 if (this.msgHandlers['buy']) this.msgHandlers['buy'](data.buy);
 
                 const contractId = data.buy.contract_id;
