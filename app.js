@@ -178,6 +178,7 @@ async function runBacktest() {
 
         ui.backtest.logBody.innerHTML = '';
         const logs = [...result.trades].reverse().slice(0, 100);
+        const fragment = document.createDocumentFragment();
 
         logs.forEach(t => {
             const tr = document.createElement('tr');
@@ -191,8 +192,9 @@ async function runBacktest() {
                 <td class="px-4 py-2 font-bold ${color}">${t.result}</td>
                 <td class="px-4 py-2 ${color}">$${t.profit.toFixed(2)}</td>
             `;
-            ui.backtest.logBody.appendChild(tr);
+            fragment.appendChild(tr);
         });
+        ui.backtest.logBody.appendChild(fragment);
 
         ui.backtest.results.classList.remove('hidden');
 
