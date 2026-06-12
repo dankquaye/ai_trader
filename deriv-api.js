@@ -25,16 +25,16 @@ class DerivAPI {
         };
 
         // Credentials
-        // NOTE: Tokens should be provided by the user via UI or Environment Variables.
-        // Hardcoded tokens removed for security.
+        // NOTE: Tokens and App IDs must be provided by the user via config.js, UI, or Environment Variables.
+        // Hardcoded values removed for security and flexibility.
         this.credentials = {
             demo: {
-                appId: 71238,
-                token: '' // User must provide
+                appId: window.DerivConfig?.demo?.appId || null,
+                token: ''
             },
             live: {
-                appId: 71236,
-                token: '' // User must provide
+                appId: window.DerivConfig?.live?.appId || null,
+                token: ''
             }
         };
 
@@ -62,6 +62,11 @@ class DerivAPI {
         const creds = this.credentials[this.accountType];
         this.appId = creds.appId;
         this.token = creds.token;
+
+        if (!this.appId) {
+            console.error('Cannot connect: Missing App ID. Ensure config.js is loaded correctly.');
+            return;
+        }
 
         if (!this.token) {
             console.warn('Cannot connect: Missing API Token');
