@@ -115,6 +115,7 @@ class Backtester {
 
         // Aggregate 5m candles
         let temp5m = { open: 0, high: -Infinity, low: Infinity, close: 0, time: 0, count: 0 };
+        let lastYieldTime = Date.now();
 
         for (let i = 0; i < total; i++) {
             const candle = this.data[i];
@@ -162,7 +163,14 @@ class Backtester {
             }
 
             // Yield to UI thread occasionally to prevent freezing
-            if (i % 500 === 0) await new Promise(r => setTimeout(r, 0));
+            // Check every 100 iterations to avoid expensive Date.now() calls
+            if (i % 100 === 0) {
+                const now = Date.now();
+                if (now - lastYieldTime > 20) { // Yield if more than 20ms passed
+                    await new Promise(r => setTimeout(r, 0));
+                    lastYieldTime = Date.now();
+                }
+            }
         }
     }
 
