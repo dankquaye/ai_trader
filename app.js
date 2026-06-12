@@ -681,6 +681,22 @@ function closeModal() {
 window.updateTradeHistory = (history, totalProfit, wins, losses) => {
     ui.botTotalProfit.innerText = `$${totalProfit.toFixed(2)}`;
     ui.botTotalProfit.className = totalProfit >= 0 ? 'font-bold text-green-400' : 'font-bold text-red-400';
+
+    if (!history || history.length === 0) {
+        ui.historyTable.innerHTML = `
+            <tr>
+                <td colspan="7" class="px-6 py-8 text-center text-gray-500">
+                    <div class="flex flex-col items-center justify-center space-y-2">
+                        <i class="fa-solid fa-folder-open text-3xl text-gray-600"></i>
+                        <p class="text-base font-bold text-gray-400">No trades yet</p>
+                        <p class="text-xs">Start the bot to see your trade history.</p>
+                    </div>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
     ui.historyTable.innerHTML = '';
 
     if (!history || history.length === 0) {
