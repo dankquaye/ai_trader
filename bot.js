@@ -1133,6 +1133,70 @@ class TradingBot {
     }
 
     // ... Re-add full implementations for critical helpers ...
+
+    // ============================================================
+    // Virtual Trading (Recovery)
+    // ============================================================
+
+    executeVirtualTrade(direction) {
+        if (this.ticks.length === 0) return;
+        let tradeDuration = this.useDynamicDuration ? 2 : this.duration;
+        this.virtualTrade = {
+            entryPrice: this.ticks[this.ticks.length-1],
+            direction: direction,
+            startTime: Date.now(),
+            duration: tradeDuration,
+            startTickIndex: this.ticks.length
+        };
+        this.log(`[VIRTUAL] Simulating ${direction} trade...`);
+        this.hasOpenTrade = true;
+    }
+
+    processVirtualTrade() {
+        if (!this.virtualTrade) return;
+        const currentTickIndex = this.ticks.length;
+        const currentPrice = this.ticks[currentTickIndex - 1];
+        const { entryPrice, direction, startTickIndex, duration } = this.virtualTrade;
+        let pnlPct = (currentPrice - entryPrice) / entryPrice;
+        if (direction === 'fall') pnlPct = -pnlPct;
+
+        if (pnlPct < -0.0005) { // Stop Loss
+             this.hasOpenTrade = false;
+             this.virtualTrade = null;
+             this.handleVirtualResult(false, 'stop_loss');
+             return;
+        }
+        if (pnlPct > 0.001 && (currentTickIndex - startTickIndex) <= 2) { // Scalp
+             this.hasOpenTrade = false;
+             this.virtualTrade = null;
+             this.handleVirtualResult(true, 'momentum_scalp');
+             return;
+        }
+        if (currentTickIndex - startTickIndex >= duration) { // Expiry
+            const isWin = pnlPct > 0;
+            this.hasOpenTrade = false;
+            this.virtualTrade = null;
+            this.handleVirtualResult(isWin, 'expiry');
+        }
+    }
+
+    handleVirtualResult(isWin) {
+        if (isWin) {
+            this.virtualWins++;
+            this.virtualLosses = 0;
+            this.log(`[VIRTUAL] WON. Streak: ${this.virtualWins}`);
+        } else {
+            this.virtualWins = 0;
+            this.virtualLosses++;
+            this.log(`[VIRTUAL] LOST.`);
+        }
+        if (this.virtualWins >= 2) {
+            this.isVirtualRecovery = false;
+            this.consecutiveLosses = 0;
+            this.log(`[RECOVERY] Consistent wins detected. Resuming Real Trading.`);
+            if(window.updateRecoveryStatus) window.updateRecoveryStatus(false);
+        }
+    }
 }
 
 // Restore full implementations for helpers that were stubbed above to ensure functionality
@@ -1191,63 +1255,3 @@ TradingBot.prototype.calculateMACD = function(data, fastPeriod, slowPeriod, sign
     return { macdLine, signalLine, histogram };
 };
 
-// ... Restore virtual trading logic
-TradingBot.prototype.executeVirtualTrade = function(direction) {
-    if (this.ticks.length === 0) return;
-    let tradeDuration = this.useDynamicDuration ? 2 : this.duration;
-    this.virtualTrade = {
-        entryPrice: this.ticks[this.ticks.length-1],
-        direction: direction,
-        startTime: Date.now(),
-        duration: tradeDuration,
-        startTickIndex: this.ticks.length
-    };
-    this.log(`[VIRTUAL] Simulating ${direction} trade...`);
-    this.hasOpenTrade = true;
-};
-
-TradingBot.prototype.processVirtualTrade = function() {
-    if (!this.virtualTrade) return;
-    const currentTickIndex = this.ticks.length;
-    const currentPrice = this.ticks[currentTickIndex - 1];
-    const { entryPrice, direction, startTickIndex, duration } = this.virtualTrade;
-    let pnlPct = (currentPrice - entryPrice) / entryPrice;
-    if (direction === 'fall') pnlPct = -pnlPct;
-
-    if (pnlPct < -0.0005) { // Stop Loss
-         this.hasOpenTrade = false;
-         this.virtualTrade = null;
-         this.handleVirtualResult(false, 'stop_loss');
-         return;
-    }
-    if (pnlPct > 0.001 && (currentTickIndex - startTickIndex) <= 2) { // Scalp
-         this.hasOpenTrade = false;
-         this.virtualTrade = null;
-         this.handleVirtualResult(true, 'momentum_scalp');
-         return;
-    }
-    if (currentTickIndex - startTickIndex >= duration) { // Expiry
-        const isWin = pnlPct > 0;
-        this.hasOpenTrade = false;
-        this.virtualTrade = null;
-        this.handleVirtualResult(isWin, 'expiry');
-    }
-};
-
-TradingBot.prototype.handleVirtualResult = function(isWin) {
-    if (isWin) {
-        this.virtualWins++;
-        this.virtualLosses = 0;
-        this.log(`[VIRTUAL] WON. Streak: ${this.virtualWins}`);
-    } else {
-        this.virtualWins = 0;
-        this.virtualLosses++;
-        this.log(`[VIRTUAL] LOST.`);
-    }
-    if (this.virtualWins >= 2) {
-        this.isVirtualRecovery = false;
-        this.consecutiveLosses = 0;
-        this.log(`[RECOVERY] Consistent wins detected. Resuming Real Trading.`);
-        if(window.updateRecoveryStatus) window.updateRecoveryStatus(false);
-    }
-};
