@@ -732,6 +732,53 @@ function aggregateTick(time, price) {
     }
 }
 
+// --- Event Listeners ---
+
+function setupEventListeners() {
+    // Navigation (Required to access UI sections)
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const target = btn.dataset.target;
+            ui.pages.forEach(p => p.classList.add('hidden'));
+            const targetEl = document.getElementById(target);
+            if(targetEl) targetEl.classList.remove('hidden');
+            ui.navBtns.forEach(b => b.classList.remove('active', 'text-blue-400'));
+            btn.classList.add('active', 'text-blue-400');
+            if(target === 'platform' && chart) {
+                chart.resize(ui.chartContainer.clientWidth, ui.chartContainer.clientHeight);
+            }
+        });
+    });
+
+    // UX: Modal interactions
+    ui.modal.closes.forEach(el => el.addEventListener('click', closeModal));
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeModal();
+    });
+
+    // UX: Buttons with new ARIA labels
+    ui.btns.pauseBot.addEventListener('click', () => {
+        if(bot.isPaused) {
+            bot.resume();
+            ui.btns.pauseBot.innerHTML = '<i class="fa-solid fa-pause"></i>';
+            ui.btns.pauseBot.classList.remove('bg-green-600');
+            ui.btns.pauseBot.classList.add('bg-yellow-600');
+        } else {
+            bot.pause();
+            ui.btns.pauseBot.innerHTML = '<i class="fa-solid fa-play"></i>';
+            ui.btns.pauseBot.classList.remove('bg-yellow-600');
+            ui.btns.pauseBot.classList.add('bg-green-600');
+        }
+    });
+
+    ui.btns.killSwitch.addEventListener('click', () => {
+        bot.stop();
+        showToast('EMERGENCY STOP ACTIVATED', 'error');
+        ui.btns.startBot.classList.remove('hidden');
+        ui.btns.stopBot.classList.add('hidden');
+    });
+}
+
 // --- API Events ---
 
 function setupApiCallbacks() {
