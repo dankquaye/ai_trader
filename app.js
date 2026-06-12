@@ -734,6 +734,184 @@ function aggregateTick(time, price) {
 
 // --- API Events ---
 
+function setupEventListeners() {
+    // Navigation
+    ui.navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const target = btn.dataset.target;
+            ui.pages.forEach(p => p.classList.add('hidden'));
+            const targetEl = document.getElementById(target);
+            if (targetEl) targetEl.classList.remove('hidden');
+            ui.navBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            if(window.bot && ui.assetSelector) window.bot.currentSymbol = ui.assetSelector.value;
+        });
+    });
+
+    // Modal Close
+    if (ui.modal.closes) {
+        ui.modal.closes.forEach(btn => {
+            btn.addEventListener('click', closeModal);
+        });
+    }
+
+    // Bot Controls
+    if (ui.btns.startBot) {
+        ui.btns.startBot.addEventListener('click', () => {
+            if(bot) {
+                bot.start();
+                ui.btns.startBot.classList.add('hidden');
+                ui.btns.stopBot.classList.remove('hidden');
+                ui.btns.pauseBot.classList.remove('hidden');
+                ui.btns.killSwitch.classList.remove('hidden');
+            }
+        });
+    }
+
+    if (ui.btns.stopBot) {
+        ui.btns.stopBot.addEventListener('click', () => {
+            if(bot) {
+                bot.stop();
+                ui.btns.startBot.classList.remove('hidden');
+                ui.btns.stopBot.classList.add('hidden');
+                ui.btns.pauseBot.classList.add('hidden');
+                ui.btns.killSwitch.classList.add('hidden');
+            }
+        });
+    }
+
+    if (ui.btns.pauseBot) {
+        ui.btns.pauseBot.addEventListener('click', () => {
+            if(bot) {
+                const isPaused = bot.togglePause();
+                ui.btns.pauseBot.innerHTML = isPaused ? '<i class="fa-solid fa-play"></i>' : '<i class="fa-solid fa-pause"></i>';
+                ui.btns.pauseBot.setAttribute('aria-label', isPaused ? "Resume Bot" : "Pause Bot");
+            }
+        });
+    }
+
+    if (ui.btns.killSwitch) {
+        ui.btns.killSwitch.addEventListener('click', () => {
+             if(bot) bot.stop();
+             location.reload();
+        });
+    }
+
+    // Manual Trade
+    if (ui.btns.rise) {
+        ui.btns.rise.addEventListener('click', () => {
+            if(api && ui.inputs.stake && ui.inputs.duration) {
+                api.buy('rise', ui.inputs.stake.value, ui.inputs.duration.value);
+            }
+        });
+    }
+    if (ui.btns.fall) {
+        ui.btns.fall.addEventListener('click', () => {
+            if(api && ui.inputs.stake && ui.inputs.duration) {
+                api.buy('fall', ui.inputs.stake.value, ui.inputs.duration.value);
+            }
+        });
+    }
+
+    // Settings
+    if (ui.accountSelector) {
+        ui.accountSelector.addEventListener('change', () => {
+             if(bot) bot.setAccountType(ui.accountSelector.value);
+        });
+    }
+
+    if (ui.tokenInput) {
+        ui.tokenInput.addEventListener('change', () => {
+            const token = ui.tokenInput.value;
+            if(token && api) api.authorize(token);
+        });
+    }
+
+    // Presets
+    document.querySelectorAll('.btn-preset').forEach(btn => {
+        btn.addEventListener('click', () => {
+            applyPreset(btn.dataset.preset);
+        });
+    });
+
+    // Backtest
+    if (ui.backtest.runBtn) {
+        ui.backtest.runBtn.addEventListener('click', runBacktest);
+    }
+
+    // Export History
+    if (ui.btns.exportHistory) {
+        ui.btns.exportHistory.addEventListener('click', exportHistory);
+    }
+
+    // Support
+    if (ui.btns.sendSupport) {
+        ui.btns.sendSupport.addEventListener('click', () => {
+            showToast('Message sent to support!', 'success');
+        });
+    }
+
+    // Load Challenge
+    if (ui.btns.loadChallenge) {
+        ui.btns.loadChallenge.addEventListener('click', () => {
+             if(bot) bot.setSmallAccountMode(true);
+             showToast('Small Account Challenge Mode Loaded', 'success');
+        });
+    }
+
+    // Strategy Change
+    if (ui.botSettings.strategy) {
+        ui.botSettings.strategy.addEventListener('change', () => {
+             const strat = ui.botSettings.strategy.value;
+             renderStrategyParams(strat);
+             if(bot) bot.updateConfig(strat, ui.botSettings.risk.value);
+             saveSettings();
+        });
+    }
+
+    // Risk Change
+    if (ui.botSettings.risk) {
+        ui.botSettings.risk.addEventListener('change', () => {
+             if(bot) bot.updateConfig(ui.botSettings.strategy.value, ui.botSettings.risk.value);
+             saveSettings();
+        });
+    }
+
+    // Other checkboxes
+    ['useMartingale', 'useSmartRisk', 'useFilter', 'avoidSqueeze', 'autoSelect', 'useAIFilter', 'lockParams'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener('change', () => {
+                if (id === 'lockParams' && bot) bot.setParamLock(el.checked);
+                if (id === 'autoSelect') {
+                    if (el.checked) startAutoScanner();
+                    else stopAutoScanner();
+                }
+                if (id === 'useAIFilter' && bot) bot.setAIFilter(el.checked);
+
+                saveSettings();
+            });
+        }
+    });
+
+    // Inputs save on change
+    ['martingale-multiplier', 'take-profit', 'stop-loss', 'stake', 'duration', 'adx-threshold'].forEach(id => {
+         const el = document.getElementById(id);
+         if(el) el.addEventListener('change', saveSettings);
+    });
+
+    if (ui.assetSelector) {
+        ui.assetSelector.addEventListener('change', () => {
+            if(bot) bot.setSymbol(ui.assetSelector.value);
+            if(api) {
+                 api.subscribeTicks(ui.assetSelector.value);
+                 api.getHistory(ui.assetSelector.value);
+            }
+            saveSettings();
+        });
+    }
+}
+
 function setupApiCallbacks() {
     api.on('authorize', (data) => {
         ui.profile.loginid.innerText = `ID: ${data.loginid}`;
