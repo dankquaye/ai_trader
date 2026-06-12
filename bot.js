@@ -1104,7 +1104,26 @@ class TradingBot {
     }
     detectOrderBlock(candles) { return 'neutral'; }
     detectLiquiditySweep(candles) { return 'neutral'; }
-    calculateChoppinessIndex(candles, period) { return []; } // Simplified stub for cleanup if unused in main flow or fully implemented
+    calculateChoppinessIndex(candles, period) {
+        let chop = [];
+        if (candles.length < period + 1) return [];
+        const atr = this.calculateATR(candles, 1);
+        for (let i = period; i < candles.length; i++) {
+            let sumTr = 0;
+            let maxHigh = -Infinity;
+            let minLow = Infinity;
+            for (let j = 0; j < period; j++) {
+                sumTr += atr[i-j] || 0;
+                maxHigh = Math.max(maxHigh, candles[i-j].high);
+                minLow = Math.min(minLow, candles[i-j].low);
+            }
+            const range = maxHigh - minLow;
+            if (range === 0) chop.push(50);
+            else chop.push(100 * Math.log10(sumTr / range) / Math.log10(period));
+        }
+        return chop;
+    }
+
     calculateShannonEntropy(candles, period) {
         if (candles.length < period + 1) return 0;
         const returns = [];
@@ -1150,26 +1169,6 @@ TradingBot.prototype.analyzeNeuralTrend = function(prices) {
     if (l50 > l200 && lastPrice > l50 && lRsi > 50 && lRsi < 75 && !isExtended) return 'rise';
     if (l50 < l200 && lastPrice < l50 && lRsi < 50 && lRsi > 25 && !isExtended) return 'fall';
     return null;
-};
-
-TradingBot.prototype.calculateChoppinessIndex = function(candles, period) {
-    let chop = [];
-    if (candles.length < period + 1) return [];
-    const atr = this.calculateATR(candles, 1);
-    for (let i = period; i < candles.length; i++) {
-        let sumTr = 0;
-        let maxHigh = -Infinity;
-        let minLow = Infinity;
-        for (let j = 0; j < period; j++) {
-            sumTr += atr[i-j] || 0;
-            maxHigh = Math.max(maxHigh, candles[i-j].high);
-            minLow = Math.min(minLow, candles[i-j].low);
-        }
-        const range = maxHigh - minLow;
-        if (range === 0) chop.push(50);
-        else chop.push(100 * Math.log10(sumTr / range) / Math.log10(period));
-    }
-    return chop;
 };
 
 TradingBot.prototype.calculateMACD = function(data, fastPeriod, slowPeriod, signalPeriod) {
