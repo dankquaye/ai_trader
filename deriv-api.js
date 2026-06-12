@@ -130,7 +130,7 @@ class DerivAPI {
     sendRequest(data, suppressGlobal = false) {
         return new Promise((resolve, reject) => {
             if (!this.isConnected) return reject(new Error('Not connected'));
-            const reqId = Date.now() + Math.floor(Math.random() * 1000);
+            const reqId = Date.now() + (crypto.getRandomValues(new Uint32Array(1))[0] % 1000);
             data.req_id = reqId;
 
             const timeoutId = setTimeout(() => {
