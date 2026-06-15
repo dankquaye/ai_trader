@@ -1,3 +1,3 @@
-## 2024-05-18 - [Trade History Empty State]
-**Learning:** Tables displaying dynamic data, such as the Trade History table, should implement a helpful empty state with an icon and message when no data is present, rather than leaving the table body empty.
-**Action:** Implemented an empty state rendering logic in `app.js` using `colspan="7"` to span the table width.
+## 2026-06-15 - Reasoning Modal Accessibility
+**Learning:** In a modal implementation, converting an interactive `div` (like a close icon) to a semantic `<button type="button">` is effective for accessibility, but it's crucial to retain original class names (like `.modal-close`) to prevent breaking existing JavaScript event listeners that target those classes.
+**Action:** Always maintain existing functional class names when upgrading elements to semantic equivalents, and ensure ARIA attributes (`role`, `aria-modal`, `aria-labelledby`) are properly linked.
